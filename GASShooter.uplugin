@@ -1,0 +1,41 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "Gameplay Ability System Shooter",
+	"Description": "",
+	"Category": "Gameplay",
+	"CreatedBy": "tranek",
+	"CreatedByURL": "https://github.com/tranek",
+	"DocsURL": "https://github.com/tranek/GASShooter",
+	"MarketplaceURL": "",
+	"SupportURL": "https://github.com/tranek/GASShooter",
+	"EngineVersion": "4.26.0",
+	"EnabledByDefault": true,
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "GASShooter",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [
+				"Engine",
+				"AIModule",
+				"GameplayAbilities",
+			]
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "GameplayAbilities",
+			"Enabled": true
+		},
+		{
+			"Name": "Paper2D",
+			"Enabled": true
+		},
+	]
+}
