@@ -78,19 +78,14 @@ public:
 
 	virtual void FinishDying() override;
 
-    /**
-    * Getters for character perspective (pure virtual)
-    **/
+	UFUNCTION(BlueprintCallable, Category = "GASShooter|GSHeroCharacter")
+	virtual bool IsInFirstPersonPerspective() const;
 
-	virtual bool IsInFirstPersonPerspective() const override;
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "GASShooter|GSHeroCharacter")
+	USkeletalMeshComponent* GetFirstPersonMesh() const;
 
-	virtual USkeletalMeshComponent* GetFirstPersonMesh() const override;
-
-	virtual USkeletalMeshComponent* GetThirdPersonMesh() const override;
-
-    /**
-    * Weapon functionalities
-    **/
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "GASShooter|GSHeroCharacter")
+	USkeletalMeshComponent* GetThirdPersonMesh() const;
 
 	UFUNCTION(BlueprintCallable, Category = "GASShooter|Inventory")
 	AGSWeapon* GetCurrentWeapon() const;
