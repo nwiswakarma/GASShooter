@@ -52,9 +52,6 @@ class GASSHOOTER_API AGSHeroCharacter : public AGSCharacterBase, public IGSInter
 public:
 	AGSHeroCharacter(const class FObjectInitializer& ObjectInitializer);
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "GASShooter|GSHeroCharacter")
-	bool bStartInFirstPersonPerspective;
-
 	FGameplayTag CurrentWeaponTag;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -79,12 +76,8 @@ public:
 	virtual void FinishDying() override;
 
     /**
-    * Getters for character perspective (pure virtual)
+    * Getters for character perspective
     **/
-
-	virtual bool IsInFirstPersonPerspective() const override;
-
-	virtual USkeletalMeshComponent* GetFirstPersonMesh() const override;
 
 	virtual USkeletalMeshComponent* GetThirdPersonMesh() const override;
 
@@ -197,9 +190,6 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GASShooter|GSHeroCharacter")
 	FVector StartingThirdPersonMeshLocation;
 
-	UPROPERTY(BlueprintReadOnly, Category = "GASShooter|GSHeroCharacter")
-	FVector StartingFirstPersonMeshLocation;
-
 	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category = "GASShooter|Abilities")
 	float ReviveDuration;
 
@@ -215,21 +205,12 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "GASShooter|Camera")
 	FVector StartingThirdPersonCameraBoomLocation;
 
-	UPROPERTY(BlueprintReadOnly, Category = "GASShooter|Camera")
-	bool bIsFirstPersonPerspective;
-
-	UPROPERTY(BlueprintReadOnly, Category = "GASShooter|GSHeroCharacter")
-	bool bWasInFirstPersonPerspectiveWhenKnockedDown;
-
 	bool bASCInputBound;
 
 	// Set to true when we change the weapon predictively and flip it to false when the Server replicates to confirm.
 	// We use this if the Server refused a weapon change ability's activation to ask the Server to sync the client back up
 	// with the correct CurrentWeapon.
 	bool bChangedWeaponLocally;
-
-	UPROPERTY(BlueprintReadOnly, Category = "GASShooter|Camera")
-	float Default1PFOV;
 
 	UPROPERTY(BlueprintReadOnly, Category = "GASShooter|Camera")
 	float Default3PFOV;
@@ -242,12 +223,6 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, VisibleAnywhere, Category = "GASShooter|Camera")
 	class UCameraComponent* ThirdPersonCamera;
-
-	UPROPERTY(BlueprintReadOnly, VisibleAnywhere, Category = "GASShooter|Camera")
-	class UCameraComponent* FirstPersonCamera;
-
-	UPROPERTY(BlueprintReadOnly, VisibleAnywhere)
-	USkeletalMeshComponent* FirstPersonMesh;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "GASShooter|UI")
 	TSubclassOf<class UGSFloatingStatusBarWidget> UIFloatingStatusBarClass;
@@ -320,12 +295,6 @@ protected:
 
 	// Mouse + Gamepad
 	void MoveRight(float Value);
-
-	// Toggles between perspectives
-	void TogglePerspective();
-
-	// Sets the perspective
-	void SetPerspective(bool Is1PPerspective);
 
 	// Creates and initializes the floating status bar for heroes.
 	// Safe to call many times because it checks to make sure it only executes once.

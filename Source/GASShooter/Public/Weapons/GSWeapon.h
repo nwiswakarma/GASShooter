@@ -86,9 +86,6 @@ public:
 	virtual class UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "GASShooter|GSWeapon")
-	virtual USkeletalMeshComponent* GetWeaponMesh1P() const;
-
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "GASShooter|GSWeapon")
 	virtual USkeletalMeshComponent* GetWeaponMesh3P() const;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -152,9 +149,6 @@ public:
 	virtual bool HasInfiniteAmmo() const;
 
 	UFUNCTION(BlueprintCallable, Category = "GASShooter|Animation")
-	UAnimMontage* GetEquip1PMontage() const;
-
-	UFUNCTION(BlueprintCallable, Category = "GASShooter|Animation")
 	UAnimMontage* GetEquip3PMontage() const;
 	
 	UFUNCTION(BlueprintCallable, Category = "GASShooter|Audio")
@@ -206,19 +200,11 @@ protected:
 	class UCapsuleComponent* CollisionComp;
 
 	UPROPERTY(VisibleAnywhere, Category = "GASShooter|GSWeapon")
-	USkeletalMeshComponent* WeaponMesh1P;
-
-	UPROPERTY(VisibleAnywhere, Category = "GASShooter|GSWeapon")
 	USkeletalMeshComponent* WeaponMesh3P;
 
 	// Relative Location of weapon 3P Mesh when in pickup mode
-	// 1P weapon mesh is invisible so it doesn't need one
 	UPROPERTY(EditDefaultsOnly, Category = "GASShooter|GSWeapon")
 	FVector WeaponMesh3PickupRelativeLocation;
-
-	// Relative Location of weapon 1P Mesh when equipped
-	UPROPERTY(EditDefaultsOnly, Category = "GASShooter|GSWeapon")
-	FVector WeaponMesh1PEquippedRelativeLocation;
 
 	// Relative Location of weapon 3P Mesh when equipped
 	UPROPERTY(EditDefaultsOnly, Category = "GASShooter|GSWeapon")
@@ -239,9 +225,6 @@ protected:
 	// Things like fire mode for rifle
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "GASShooter|GSWeapon")
 	FText DefaultStatusText;
-
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "GASShooter|Animation")
-	UAnimMontage* Equip1PMontage;
 
 	UPROPERTY(BlueprintReadonly, EditAnywhere, Category = "GASShooter|Animation")
 	UAnimMontage* Equip3PMontage;

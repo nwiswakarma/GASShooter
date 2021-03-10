@@ -24,12 +24,6 @@ UGSAT_WaitInteractableTarget* UGSAT_WaitInteractableTarget::WaitForInteractableT
 	
 	AGSHeroCharacter* Hero = Cast<AGSHeroCharacter>(OwningAbility->GetCurrentActorInfo()->AvatarActor);
 
-	MyObj->StartLocation1P = FGameplayAbilityTargetingLocationInfo();
-	MyObj->StartLocation1P.LocationType = EGameplayAbilityTargetingLocationType::SocketTransform;
-	MyObj->StartLocation1P.SourceComponent = Hero->GetFirstPersonMesh();
-	MyObj->StartLocation1P.SourceSocketName = "WeaponPoint";
-	MyObj->StartLocation1P.SourceAbility = OwningAbility;
-
 	MyObj->StartLocation3P = FGameplayAbilityTargetingLocationInfo();
 	MyObj->StartLocation3P.LocationType = EGameplayAbilityTargetingLocationType::SocketTransform;
 	MyObj->StartLocation3P.SourceComponent = Hero->GetThirdPersonMesh();
@@ -193,14 +187,8 @@ void UGSAT_WaitInteractableTarget::PerformTrace()
 
 	// Check player's perspective, could be 1P or 3P
 	AGSHeroCharacter* Hero = Cast<AGSHeroCharacter>(SourceActor);
-	if (Hero->IsInFirstPersonPerspective())
-	{
-		StartLocation = StartLocation1P;
-	}
-	else
-	{
-		StartLocation = StartLocation3P;
-	}
+
+    StartLocation = StartLocation3P;
 
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(AGameplayAbilityTargetActor_SingleLineTrace), bTraceComplex);
 	Params.bReturnPhysicalMaterial = true;

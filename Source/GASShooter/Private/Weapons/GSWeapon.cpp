@@ -42,13 +42,6 @@ AGSWeapon::AGSWeapon()
     CollisionComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
     RootComponent = CollisionComp;
 
-    WeaponMesh1P = CreateDefaultSubobject<USkeletalMeshComponent>(FName("WeaponMesh1P"));
-    WeaponMesh1P->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-    WeaponMesh1P->CastShadow = false;
-    WeaponMesh1P->SetVisibility(false, true);
-    WeaponMesh1P->SetupAttachment(CollisionComp);
-    WeaponMesh1P->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPose;
-
     WeaponMesh3PickupRelativeLocation = FVector(0.0f, -25.0f, 0.0f);
 
     WeaponMesh3P = CreateDefaultSubobject<USkeletalMeshComponent>(FName("WeaponMesh3P"));
@@ -74,11 +67,6 @@ AGSWeapon::AGSWeapon()
 UAbilitySystemComponent* AGSWeapon::GetAbilitySystemComponent() const
 {
     return AbilitySystemComponent;
-}
-
-USkeletalMeshComponent* AGSWeapon::GetWeaponMesh1P() const
-{
-    return WeaponMesh1P;
 }
 
 USkeletalMeshComponent* AGSWeapon::GetWeaponMesh3P() const
@@ -108,6 +96,7 @@ void AGSWeapon::PreReplication(IRepChangedPropertyTracker& ChangedPropertyTracke
 void AGSWeapon::SetOwningCharacter(AGSHeroCharacter* InOwningCharacter)
 {
     OwningCharacter = InOwningCharacter;
+
     if (OwningCharacter)
     {
         // Called when added to inventory
@@ -151,22 +140,6 @@ void AGSWeapon::Equip()
 
     FName AttachPoint = OwningCharacter->GetWeaponAttachPoint();
 
-    if (WeaponMesh1P)
-    {
-        WeaponMesh1P->AttachToComponent(OwningCharacter->GetFirstPersonMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, AttachPoint);
-        WeaponMesh1P->SetRelativeLocation(WeaponMesh1PEquippedRelativeLocation);
-        WeaponMesh1P->SetRelativeRotation(FRotator(0, 0, -90.0f));
-
-        if (OwningCharacter->IsInFirstPersonPerspective())
-        {
-            WeaponMesh1P->SetVisibility(true, true);
-        }
-        else
-        {
-            WeaponMesh1P->SetVisibility(false, true);
-        }
-    }
-
     if (WeaponMesh3P)
     {
         WeaponMesh3P->AttachToComponent(OwningCharacter->GetThirdPersonMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, AttachPoint);
@@ -175,15 +148,7 @@ void AGSWeapon::Equip()
         WeaponMesh3P->CastShadow = true;
         WeaponMesh3P->bCastHiddenShadow = true;
 
-        if (OwningCharacter->IsInFirstPersonPerspective())
-        {
-            WeaponMesh3P->SetVisibility(true, true); // Without this, the weapon's 3p shadow doesn't show
-            WeaponMesh3P->SetVisibility(false, true);
-        }
-        else
-        {
-            WeaponMesh3P->SetVisibility(true, true);
-        }
+        WeaponMesh3P->SetVisibility(true, true);
     }
 }
 
@@ -196,9 +161,6 @@ void AGSWeapon::UnEquip()
 
     // Necessary to detach so that when toggling perspective all meshes attached won't become visible.
 
-    WeaponMesh1P->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
-    WeaponMesh1P->SetVisibility(false, true);
-
     WeaponMesh3P->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
     WeaponMesh3P->CastShadow = false;
     WeaponMesh3P->bCastHiddenShadow = false;
@@ -208,13 +170,13 @@ void AGSWeapon::UnEquip()
 
 void AGSWeapon::AddAbilities()
 {
-    if (! IsValid(AbilitySystemComponent))
+    // Grant abilities, but only on the server  
+    if (GetLocalRole() != ROLE_Authority)
     {
         return;
     }
 
-    // Grant abilities, but only on the server  
-    if (GetLocalRole() != ROLE_Authority)
+    if (! IsValid(AbilitySystemComponent))
     {
         return;
     }
@@ -236,13 +198,13 @@ void AGSWeapon::AddAbilities()
 
 void AGSWeapon::RemoveAbilities()
 {
-    if (! IsValid(AbilitySystemComponent))
+    // Remove abilities, but only on the server 
+    if (GetLocalRole() != ROLE_Authority)
     {
         return;
     }
 
-    // Remove abilities, but only on the server 
-    if (GetLocalRole() != ROLE_Authority)
+    if (! IsValid(AbilitySystemComponent))
     {
         return;
     }
@@ -272,12 +234,6 @@ void AGSWeapon::OnDropped_Implementation(FVector NewLocation)
 
     SetActorLocation(NewLocation);
     CollisionComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-
-    if (WeaponMesh1P)
-    {
-        WeaponMesh1P->AttachToComponent(CollisionComp, FAttachmentTransformRules::SnapToTargetIncludingScale);
-        WeaponMesh1P->SetVisibility(false, true);
-    }
 
     if (WeaponMesh3P)
     {
@@ -351,11 +307,6 @@ bool AGSWeapon::HasInfiniteAmmo() const
     return bInfiniteAmmo;
 }
 
-UAnimMontage* AGSWeapon::GetEquip1PMontage() const
-{
-    return Equip1PMontage;
-}
-
 UAnimMontage* AGSWeapon::GetEquip3PMontage() const
 {
     return Equip3PMontage;
@@ -425,17 +376,15 @@ void AGSWeapon::EndPlay(EEndPlayReason::Type EndPlayReason)
 
 void AGSWeapon::PickUpOnTouch(AGSHeroCharacter* InCharacter)
 {
-    if (!InCharacter || !InCharacter->IsAlive() || !InCharacter->GetAbilitySystemComponent() || InCharacter->GetAbilitySystemComponent()->HasAnyMatchingGameplayTags(RestrictedPickupTags))
+    if (!InCharacter ||
+        !InCharacter->IsAlive() ||
+        !InCharacter->GetAbilitySystemComponent() ||
+        InCharacter->GetAbilitySystemComponent()->HasAnyMatchingGameplayTags(RestrictedPickupTags))
     {
         return;
     }
 
-    if (InCharacter->AddWeaponToInventory(this, true) && OwningCharacter->IsInFirstPersonPerspective())
-    {
-        WeaponMesh3P->CastShadow = false;
-        WeaponMesh3P->SetVisibility(true, true);
-        WeaponMesh3P->SetVisibility(false, true);
-    }
+    InCharacter->AddWeaponToInventory(this, true);
 }
 
 void AGSWeapon::OnRep_PrimaryClipAmmo(int32 OldPrimaryClipAmmo)

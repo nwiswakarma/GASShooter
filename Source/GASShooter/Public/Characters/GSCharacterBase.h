@@ -70,18 +70,6 @@ public:
     * Getters for character perspective (pure virtual)
     **/
 
-	UFUNCTION(BlueprintCallable, Category = "GASShooter|GSHeroCharacter")
-	virtual bool IsInFirstPersonPerspective() const
-    {
-        return false;
-    }
-
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "GASShooter|GSHeroCharacter")
-	virtual USkeletalMeshComponent* GetFirstPersonMesh() const
-    {
-        return nullptr;
-    }
-
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "GASShooter|GSHeroCharacter")
 	virtual USkeletalMeshComponent* GetThirdPersonMesh() const
     {
