@@ -121,20 +121,8 @@ void AGSPlayerController::UpdatePawnControlProjection(float DeltaTime)
     FVector ViewDst = ViewSrc;
 
     {
-        float AspectRatio = ViewportSize.Y/ViewportSize.X;
-
         FVector2D Exts = (ViewportSize*.5f)-ViewportSpanSize;
-
         FVector2D ViewportAnchorToMouse = MouseViewportPos-ViewportAnchor;
-        FVector2D VATMNormal;
-        float VATMDist;
-
-        ViewportAnchorToMouse.ToDirectionAndLength(VATMNormal, VATMDist);
-
-        if (VATMDist < KINDA_SMALL_NUMBER)
-        {
-            return;
-        }
 
         if (FMath::Abs(ViewportAnchorToMouse.X) > Exts.X)
         {
@@ -149,29 +137,6 @@ void AGSPlayerController::UpdatePawnControlProjection(float DeltaTime)
                 ? Exts.Y
                 : -Exts.Y;
         }
-
-#if 0
-        float VATMMagX = FMath::Abs(ViewportAnchorToMouse.X);
-        float VATMMagY = FMath::Abs(ViewportAnchorToMouse.Y);
-
-        float VATMSum = VATMMagX+VATMMagY;
-        float VATMRatioX = VATMMagX/VATMSum;
-        float VATMRatioY = VATMMagY/VATMSum;
-        float AdjustedVATMRatio = AspectRatio < 1.f
-            ? FMath::Lerp(1.f, AspectRatio, VATMRatioY)
-            : FMath::Lerp(AspectRatio, 1.f, VATMRatioY);
-
-        float VATMAdjustedDist = FMath::Min(VATMDist, MaxCameraDistance*AdjustedVATMRatio);
-
-        //UE_LOG(LogTemp,Warning, TEXT("%f %f %f %f"),
-        //    VATMRatioX,
-        //    VATMRatioY,
-        //    AdjustedVATMRatio,
-        //    VATMAdjustedDist
-        //    );
-
-        FVector2D ViewTargetPos = ViewportAnchor+VATMNormal*VATMAdjustedDist;
-#endif
 
         FVector2D ViewTargetPos = ViewportAnchor+ViewportAnchorToMouse;
 
@@ -199,129 +164,6 @@ void AGSPlayerController::UpdatePawnControlProjection(float DeltaTime)
         );
 
     Camera->SetWorldLocation(CameraWorldPos+(ViewInterpPos-CameraProjected));
-
-#if 0
-    // Calculate camera view target,
-    // clamped around projection anchor and viewport size
-
-    USkeletalMeshComponent* MeshComponent(HeroCharacter->GetThirdPersonMesh());
-    FVector2D TL, TR, BR, BL, MM, Ext;
-    {
-        FVector Origin(MeshComponent->Bounds.Origin);
-        FVector Extents(MeshComponent->Bounds.BoxExtent);
-        FBox2D Bounds2D(ForceInitToZero);
-        FVector2D Proj;
-
-        ProjectWorldLocationToScreen(Origin+FVector(-Extents.X, -Extents.Y, -Extents.Z), Proj);
-        Bounds2D += Proj;
-        ProjectWorldLocationToScreen(Origin+FVector( Extents.X, -Extents.Y, -Extents.Z), Proj);
-        Bounds2D += Proj;
-        ProjectWorldLocationToScreen(Origin+FVector(-Extents.X,  Extents.Y, -Extents.Z), Proj);
-        Bounds2D += Proj;
-        ProjectWorldLocationToScreen(Origin+FVector(-Extents.X, -Extents.Y,  Extents.Z), Proj);
-        Bounds2D += Proj;
-        ProjectWorldLocationToScreen(Origin+FVector(-Extents.X,  Extents.Y,  Extents.Z), Proj);
-        Bounds2D += Proj;
-        ProjectWorldLocationToScreen(Origin+FVector( Extents.X, -Extents.Y,  Extents.Z), Proj);
-        Bounds2D += Proj;
-        ProjectWorldLocationToScreen(Origin+FVector( Extents.X,  Extents.Y, -Extents.Z), Proj);
-        Bounds2D += Proj;
-        ProjectWorldLocationToScreen(Origin+FVector( Extents.X,  Extents.Y,  Extents.Z), Proj);
-        Bounds2D += Proj;
-
-        TL = Bounds2D.Min;
-        BR = Bounds2D.Max;
-    }
-    Ext = (BR-TL)*.5f;
-    MM = TL+Ext;
-
-    //FVector2D ViewportSpanSizeScaled(ViewportSpanSize/ViewportScale);
-    FVector2D ViewportSpanSizeScaled(ViewportSpanSize);
-    FVector2D ViewportMin(ViewportSpanSizeScaled);
-    FVector2D ViewportMax(ViewportSize-ViewportSpanSizeScaled);
-
-    float ViewLimitX = 1.f;
-    float ViewLimitY = 1.f;
-
-    if (ViewportAnchor.X < ViewportMin.X ||
-        ViewportAnchor.Y < ViewportMin.Y ||
-        ViewportAnchor.X > ViewportMax.X ||
-        ViewportAnchor.Y > ViewportMax.Y)
-    {
-        FVector2D ViewportAnchorClamped;
-
-        //ViewportAnchorClamped.X = ViewportMin.X+Ext.X;
-        //ViewportAnchorClamped.Y = ViewportMin.Y+Ext.Y;
-        //ViewportAnchorClamped.X = ViewportMax.X-Ext.X;
-        //ViewportAnchorClamped.Y = ViewportMax.Y-Ext.Y;
-
-        ViewportAnchorClamped.X = FMath::Clamp(ViewportAnchor.X, ViewportMin.X, ViewportMax.X);
-        ViewportAnchorClamped.Y = FMath::Clamp(ViewportAnchor.Y, ViewportMin.Y, ViewportMax.Y);
-
-        //UE_LOG(LogTemp,Warning, TEXT("%f %f"),
-        //    ViewportScale,
-        //    (ViewportAnchorClamped-MouseViewportPos).Size()
-        //    );
-
-        //FVector ReprojectPos;
-        //FVector ReprojectDir;
-
-        //UGameplayStatics::DeprojectScreenToWorld(
-        //    this,
-        //    ViewportAnchorClamped,
-        //    ReprojectPos,
-        //    ReprojectDir
-        //    );
-
-        //FVector ReprojectAnchor = FMath::RayPlaneIntersection(
-        //    ReprojectPos,
-        //    ReprojectDir,
-        //    ProjectionPlane
-        //    );
-
-        //FVector ViewProjectionDelta = ProjectionAnchor-ReprojectAnchor;
-
-        //FVector ViewInterpSrc = CameraWorldPos;
-        //FVector ViewInterpDst = ViewInterpSrc + ViewProjectionDelta;
-
-        //FVector ViewInterpPos(
-        //    FMath::FInterpTo(ViewInterpSrc.X, ViewInterpDst.X, DeltaTime, CameraOutOfBoundsInterpSpeed),
-        //    FMath::FInterpTo(ViewInterpSrc.Y, ViewInterpDst.Y, DeltaTime, CameraOutOfBoundsInterpSpeed),
-        //    FMath::FInterpTo(ViewInterpSrc.Z, ViewInterpDst.Z, DeltaTime, CameraOutOfBoundsInterpSpeed)
-        //    );
-
-        //UE_LOG(LogTemp,Warning, TEXT("%s %s"),
-        //    *ReprojectAnchor.ToString(),
-        //    *ViewProjectionDelta.ToString()
-        //    );
-
-        //Camera->SetWorldLocation(ViewInterpPos);
-
-        // Re-assign camera position
-        //CameraWorldPos = ViewInterpPos;
-    }
-#endif
-
-#if 0
-    // Calculate camera view to center towards aim target
-
-    {
-        FVector ClampedViewTarget = ProjectionAnchor+MouseProjectionDelta.GetClampedToMaxSize(MaxCameraDistance);
-
-        FVector ViewProjectionDelta = ClampedViewTarget-CameraProjected;
-
-        FVector ViewInterpSrc = CameraWorldPos;
-        FVector ViewInterpDst = ViewInterpSrc + ViewProjectionDelta;
-
-        FVector ViewInterpPos(
-            FMath::FInterpTo(ViewInterpSrc.X, ViewInterpDst.X, DeltaTime, CameraInterpSpeed),
-            FMath::FInterpTo(ViewInterpSrc.Y, ViewInterpDst.Y, DeltaTime, CameraInterpSpeed),
-            FMath::FInterpTo(ViewInterpSrc.Z, ViewInterpDst.Z, DeltaTime, CameraInterpSpeed)
-            );
-
-        Camera->SetWorldLocation(ViewInterpPos);
-    }
-#endif
 }
 
 void AGSPlayerController::CreateHUD()
