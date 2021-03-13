@@ -10,6 +10,7 @@
 
 class AGSWeapon;
 class UGameplayEffect;
+class UCameraComponent;
 
 UENUM(BlueprintType)
 enum class EGSHeroWeaponState : uint8
@@ -62,6 +63,8 @@ public:
 	// Only called on the Server. Calls before Server's AcknowledgePossession.
 	virtual void PossessedBy(AController* NewController) override;
 
+	virtual void Tick(float DeltaTime) override;
+
 	class UGSFloatingStatusBarWidget* GetFloatingStatusBar();
 
 	// Server handles knockdown - cancel abilities, remove effects, activate knockdown ability
@@ -80,6 +83,12 @@ public:
     **/
 
 	virtual USkeletalMeshComponent* GetThirdPersonMesh() const override;
+
+	UCameraComponent* GetThirdPersonCamera();
+
+    FVector GetProjectionAnchorOffset() const;
+
+    void SetAimRotation(FRotator NewAimRotation);
 
     /**
     * Weapon functionalities
@@ -137,7 +146,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "GASShooter|Inventory")
 	int32 GetNumWeapons() const;
-
 
 	/**
 	* Interactable interface
@@ -222,7 +230,7 @@ protected:
 	class USpringArmComponent* ThirdPersonCameraBoom;
 
 	UPROPERTY(BlueprintReadOnly, VisibleAnywhere, Category = "GASShooter|Camera")
-	class UCameraComponent* ThirdPersonCamera;
+	UCameraComponent* ThirdPersonCamera;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "GASShooter|UI")
 	TSubclassOf<class UGSFloatingStatusBarWidget> UIFloatingStatusBarClass;
@@ -271,6 +279,26 @@ protected:
 	// Tag changed delegate handles
 	FDelegateHandle WeaponChangingDelayReplicationTagChangedDelegateHandle;
 
+    // Top-down control
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
+	FRotator MovementFixedRotation;
+
+	UPROPERTY(Replicated)
+	FRotator AimingRotation;
+
+	UPROPERTY(BlueprintReadOnly)
+    FVector ProjectedCameraViewLocation;
+
+	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly)
+	FVector ProjectionAnchorOffset;
+
+	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly)
+	FVector2D ModelFixedBounds2D;
+
+	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly)
+	bool bUseAimInput;
+
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
@@ -295,6 +323,34 @@ protected:
 
 	// Mouse + Gamepad
 	void MoveRight(float Value);
+
+    //void UpdateAimInput();
+
+	UFUNCTION(BlueprintCallable)
+	FRotator GetAimingRotation() const
+    {
+        return AimingRotation;
+    }
+
+	virtual FRotator GetViewRotation() const override
+    {
+        if (bUseAimInput)
+        {
+            return GetAimingRotation();
+        }
+        else
+        {
+            return Super::GetViewRotation();
+        }
+    }
+
+	UFUNCTION(BlueprintCallable, Server, Unreliable)
+	void Server_SetAimRotation(FRotator NewAimRotation);
+
+	//UFUNCTION(BlueprintCallable, Server, Unreliable)
+	//void Server_UpdateAimInputData(FRotator NewAimRotation);
+
+    //void UpdateProjectedCameraViewLocation();
 
 	// Creates and initializes the floating status bar for heroes.
 	// Safe to call many times because it checks to make sure it only executes once.

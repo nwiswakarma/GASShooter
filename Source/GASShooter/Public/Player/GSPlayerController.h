@@ -8,6 +8,7 @@
 #include "GSPlayerController.generated.h"
 
 class UPaperSprite;
+class AGSHeroCharacter;
 
 /**
  * 
@@ -22,6 +23,7 @@ public:
 
 	class UGSHUDWidget* GetGSHUD();
 
+	virtual void Tick(float DeltaTime) override;
 
 	/**
 	* Weapon HUD info
@@ -48,7 +50,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "GASShooter|UI")
 	void SetHUDReticle(TSubclassOf<class UGSHUDReticle> ReticleClass);
 
-
 	UFUNCTION(Client, Reliable, WithValidation)
 	void ShowDamageNumber(float DamageAmount, AGSCharacterBase* TargetCharacter, FGameplayTagContainer DamageNumberTags);
 	void ShowDamageNumber_Implementation(float DamageAmount, AGSCharacterBase* TargetCharacter, FGameplayTagContainer DamageNumberTags);
@@ -66,11 +67,30 @@ public:
 	bool ClientSetControlRotation_Validate(FRotator NewRotation);
 
 protected:
+    
+    UPROPERTY()
+    AGSHeroCharacter* HeroCharacter = nullptr;
+
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "GASShooter|UI")
 	TSubclassOf<class UGSHUDWidget> UIHUDWidgetClass;
 
 	UPROPERTY(BlueprintReadWrite, Category = "GASShooter|UI")
 	class UGSHUDWidget* UIHUDWidget;
+
+	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly)
+    float CameraInterpSpeed = 1.0f;
+
+	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly)
+    float CameraOutOfBoundsInterpSpeed = 10.0f;
+
+	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly)
+    float MaxCameraDistance = 500.0f;
+
+	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly)
+    float ViewportSpanSize = 50.0f;
+
+	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly)
+    bool bClampMousePosition = false;
 
 	// Server only
 	virtual void OnPossess(APawn* InPawn) override;
@@ -84,4 +104,6 @@ protected:
 	void ServerKill();
 	void ServerKill_Implementation();
 	bool ServerKill_Validate();
+
+    virtual void UpdatePawnControlProjection(float DeltaTime);
 };

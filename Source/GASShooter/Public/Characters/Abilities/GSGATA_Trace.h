@@ -11,6 +11,8 @@
 #include "WorldCollision.h"
 #include "GSGATA_Trace.generated.h"
 
+class APawn;
+
 /**
  * Reusable, configurable trace TargetActor. Subclass with your own trace shapes.
  * Meant to be used with GSAT_WaitTargetDataUsingActor instead of the default WaitTargetData AbilityTask as the default
@@ -120,6 +122,8 @@ public:
 	virtual void StopTargeting();
 
 protected:
+    APawn* SourcePawn;
+
 	// Trace End point, useful for debug drawing
 	FVector CurrentTraceEnd;
 	

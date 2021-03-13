@@ -76,6 +76,7 @@ void AGSGATA_Trace::StartTargeting(UGameplayAbility* Ability)
 
 	OwningAbility = Ability;
 	SourceActor = Ability->GetCurrentActorInfo()->AvatarActor.Get();
+    SourcePawn = Cast<APawn>(SourceActor);
 
 	// This is a lazy way of emptying and repopulating the ReticleActors.
 	// We could come up with a solution that reuses them.
@@ -217,6 +218,11 @@ void AGSGATA_Trace::AimWithPlayerController(const AActor* InSourceActor, FCollis
 	FVector ViewStart = TraceStart;
 	FRotator ViewRot = StartLocation.GetTargetingTransform().GetRotation().Rotator();
 
+    if (IsValid(SourcePawn))
+    {
+        ViewRot = SourcePawn->GetViewRotation();
+    }
+    else
 	if (MasterPC)
 	{
 		MasterPC->GetPlayerViewPoint(ViewStart, ViewRot);
@@ -336,13 +342,11 @@ TArray<FHitResult> AGSGATA_Trace::PerformTrace(AActor* InSourceActor)
 	FVector TraceStart = StartLocation.GetTargetingTransform().GetLocation();
 	FVector TraceEnd;
 
-	if (MasterPC)
+	if (MasterPC && bTraceFromPlayerViewPoint)
 	{
 		FVector ViewStart;
 		FRotator ViewRot;
-		MasterPC->GetPlayerViewPoint(ViewStart, ViewRot);
-
-		TraceStart = bTraceFromPlayerViewPoint ? ViewStart : TraceStart;
+		MasterPC->GetPlayerViewPoint(TraceStart, ViewRot);
 	}
 
 	if (bUsePersistentHitResults)
