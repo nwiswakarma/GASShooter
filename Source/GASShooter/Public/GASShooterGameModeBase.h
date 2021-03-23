@@ -22,7 +22,11 @@ public:
 protected:
 	float RespawnDelay;
 
+    UPROPERTY(BlueprintReadOnly, EditDefaultsOnly)
 	TSubclassOf<class AGSHeroCharacter> HeroClass;
+
+    UPROPERTY(BlueprintReadOnly, EditDefaultsOnly)
+	TSubclassOf<class AGSHeroCharacter> EnemyClass;
 
 	AActor* EnemySpawnPoint;
 

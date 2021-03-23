@@ -218,9 +218,9 @@ void AGSGATA_Trace::AimWithPlayerController(const AActor* InSourceActor, FCollis
 	FVector ViewStart = TraceStart;
 	FRotator ViewRot = StartLocation.GetTargetingTransform().GetRotation().Rotator();
 
-    if (IsValid(SourcePawn))
+    if (SourcePawn.IsValid())
     {
-        ViewRot = SourcePawn->GetViewRotation();
+        ViewRot = SourcePawn.Get()->GetViewRotation();
     }
     else
 	if (MasterPC)

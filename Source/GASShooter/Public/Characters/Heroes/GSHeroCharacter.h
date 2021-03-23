@@ -12,6 +12,9 @@ class AGSWeapon;
 class UGameplayEffect;
 class UCameraComponent;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FWeaponChangedDelegate, AGSWeapon*, LastWeapon, AGSWeapon*, NewWeapon);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FGSCharacterWeaponAmmoChangedDelegate, int32, OldValue, int32, NewValue);
+
 UENUM(BlueprintType)
 enum class EGSHeroWeaponState : uint8
 {
@@ -63,8 +66,6 @@ public:
 	// Only called on the Server. Calls before Server's AcknowledgePossession.
 	virtual void PossessedBy(AController* NewController) override;
 
-	virtual void Tick(float DeltaTime) override;
-
 	class UGSFloatingStatusBarWidget* GetFloatingStatusBar();
 
 	// Server handles knockdown - cancel abilities, remove effects, activate knockdown ability
@@ -89,6 +90,18 @@ public:
     FVector GetProjectionAnchorOffset() const;
 
     void SetAimRotation(FRotator NewAimRotation);
+    void SetAimLocation(FVector NewAimLocation);
+
+	virtual FRotator GetViewRotation() const override;
+
+	UFUNCTION(BlueprintCallable)
+	FRotator GetAimingRotation() const;
+
+	UFUNCTION(BlueprintCallable)
+	FVector GetAimingLocation() const;
+
+	UFUNCTION(BlueprintCallable)
+	FVector GetWeaponAttachPointLocation() const;
 
     /**
     * Weapon functionalities
@@ -124,7 +137,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "GASShooter|Inventory")
 	virtual void PreviousWeapon();
 
-	FName GetWeaponAttachPoint();
+	FName GetWeaponAttachPoint() const;
 
 	UFUNCTION(BlueprintCallable, Category = "GASShooter|Inventory")
 	int32 GetPrimaryClipAmmo() const;
@@ -253,6 +266,12 @@ protected:
 	UPROPERTY()
 	class UGSAmmoAttributeSet* AmmoAttributeSet;
 
+	UPROPERTY(BlueprintAssignable, Category = "GASShooter|GSHeroCharacter")
+	FWeaponChangedDelegate OnCurrentWeaponChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "GASShooter|GSHeroCharacter")
+	FGSCharacterWeaponAmmoChangedDelegate OnCurrentWeaponPrimaryClipAmmoChanged;
+
 	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category = "GASShooter|GSHeroCharacter")
 	TSubclassOf<UGameplayEffect> KnockDownEffect;
 
@@ -282,10 +301,17 @@ protected:
     // Top-down control
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
+	bool bUseFixedMovementRotation;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
 	FRotator MovementFixedRotation;
 
 	UPROPERTY(Replicated)
 	FRotator AimingRotation;
+
+	//UPROPERTY(Replicated)
+	UPROPERTY()
+	FVector AimingLocation;
 
 	UPROPERTY(BlueprintReadOnly)
     FVector ProjectedCameraViewLocation;
@@ -324,33 +350,11 @@ protected:
 	// Mouse + Gamepad
 	void MoveRight(float Value);
 
-    //void UpdateAimInput();
-
-	UFUNCTION(BlueprintCallable)
-	FRotator GetAimingRotation() const
-    {
-        return AimingRotation;
-    }
-
-	virtual FRotator GetViewRotation() const override
-    {
-        if (bUseAimInput)
-        {
-            return GetAimingRotation();
-        }
-        else
-        {
-            return Super::GetViewRotation();
-        }
-    }
-
 	UFUNCTION(BlueprintCallable, Server, Unreliable)
 	void Server_SetAimRotation(FRotator NewAimRotation);
 
-	//UFUNCTION(BlueprintCallable, Server, Unreliable)
-	//void Server_UpdateAimInputData(FRotator NewAimRotation);
-
-    //void UpdateProjectedCameraViewLocation();
+	UFUNCTION(BlueprintCallable, Server, Unreliable)
+	void Server_SetAimLocation(FVector NewAimLocation);
 
 	// Creates and initializes the floating status bar for heroes.
 	// Safe to call many times because it checks to make sure it only executes once.

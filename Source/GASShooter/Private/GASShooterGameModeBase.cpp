@@ -15,10 +15,17 @@ AGASShooterGameModeBase::AGASShooterGameModeBase()
 {
 	RespawnDelay = 5.0f;
 
-	HeroClass = StaticLoadClass(UObject::StaticClass(), nullptr, TEXT("/Game/GASShooter/Characters/Hero/BP_HeroCharacter.BP_HeroCharacter_C"));
+	HeroClass = StaticLoadClass(UObject::StaticClass(), nullptr, TEXT("/Game/GASShooter/Characters/Hero/BP_GSHeroCharacter.BP_GSHeroCharacter_C"));
+	EnemyClass = StaticLoadClass(UObject::StaticClass(), nullptr, TEXT("/Game/GASShooter/Characters/Hero/BP_GSHeroCharacter.BP_GSHeroCharacter_C"));
+
 	if (!HeroClass)
 	{
 		UE_LOG(LogTemp, Error, TEXT("%s() Failed to find HeroClass. If it was moved, please update the reference location in C++."), *FString(__FUNCTION__));
+	}
+
+	if (!EnemyClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("%s() Failed to find EnemyClass. If it was moved, please update the reference location in C++."), *FString(__FUNCTION__));
 	}
 }
 
@@ -81,7 +88,12 @@ void AGASShooterGameModeBase::RespawnHero(AController* Controller)
 		FActorSpawnParameters SpawnParameters;
 		SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-		AGSHeroCharacter* Hero = GetWorld()->SpawnActor<AGSHeroCharacter>(HeroClass, PlayerStart->GetActorLocation(), PlayerStart->GetActorRotation(), SpawnParameters);
+		AGSHeroCharacter* Hero = GetWorld()->SpawnActor<AGSHeroCharacter>(
+            HeroClass,
+            PlayerStart->GetActorLocation(),
+            PlayerStart->GetActorRotation(),
+            SpawnParameters
+            );
 
 		APawn* OldSpectatorPawn = Controller->GetPawn();
 		Controller->UnPossess();
@@ -95,12 +107,13 @@ void AGASShooterGameModeBase::RespawnHero(AController* Controller)
 		}
 	}
 	else
+    if (IsValid(EnemySpawnPoint))
 	{
 		// Respawn AI hero
 		FActorSpawnParameters SpawnParameters;
 		SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-		AGSHeroCharacter* Hero = GetWorld()->SpawnActor<AGSHeroCharacter>(HeroClass, EnemySpawnPoint->GetActorTransform(), SpawnParameters);
+		AGSHeroCharacter* Hero = GetWorld()->SpawnActor<AGSHeroCharacter>(EnemyClass, EnemySpawnPoint->GetActorTransform(), SpawnParameters);
 
 		APawn* OldSpectatorPawn = Controller->GetPawn();
 		Controller->UnPossess();

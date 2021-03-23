@@ -11,7 +11,7 @@
 #include "WorldCollision.h"
 #include "GSGATA_Trace.generated.h"
 
-class APawn;
+class AGSHeroCharacter;
 
 /**
  * Reusable, configurable trace TargetActor. Subclass with your own trace shapes.
@@ -122,7 +122,7 @@ public:
 	virtual void StopTargeting();
 
 protected:
-    APawn* SourcePawn;
+    TWeakObjectPtr<APawn> SourcePawn;
 
 	// Trace End point, useful for debug drawing
 	FVector CurrentTraceEnd;

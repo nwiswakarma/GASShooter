@@ -55,6 +55,9 @@ public:
 	void ShowDamageNumber_Implementation(float DamageAmount, AGSCharacterBase* TargetCharacter, FGameplayTagContainer DamageNumberTags);
 	bool ShowDamageNumber_Validate(float DamageAmount, AGSCharacterBase* TargetCharacter, FGameplayTagContainer DamageNumberTags);
 
+	UFUNCTION(BlueprintCallable, Category = "GASShooter|UI")
+	FVector2D GetProjectedAimScreenLocation();
+
 	// Simple way to RPC to the client the countdown until they respawn from the GameMode. Will be latency amount of out sync with the Server.
 	UFUNCTION(Client, Reliable, WithValidation)
 	void SetRespawnCountdown(float RespawnTimeRemaining);
@@ -92,10 +95,16 @@ protected:
 	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly)
     bool bClampMousePosition = false;
 
+    FVector2D ProjectedAimScreenLocation;
+
 	// Server only
 	virtual void OnPossess(APawn* InPawn) override;
 
 	virtual void OnRep_PlayerState() override;
+
+	virtual void AcknowledgePossession(class APawn* P) override;
+
+    void UpdateHUD();
 
 	UFUNCTION(Exec)
 	void Kill();
@@ -104,6 +113,9 @@ protected:
 	void ServerKill();
 	void ServerKill_Implementation();
 	bool ServerKill_Validate();
+
+	//UFUNCTION(Client, Reliable)
+	//void ClientSyncCharacter(AGSWeapon* InWeapon);
 
     virtual void UpdatePawnControlProjection(float DeltaTime);
 };

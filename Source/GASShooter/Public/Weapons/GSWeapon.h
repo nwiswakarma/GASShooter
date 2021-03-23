@@ -148,6 +148,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "GASShooter|GSWeapon")
 	virtual bool HasInfiniteAmmo() const;
 
+	UFUNCTION(BlueprintCallable, Category = "GASShooter|GSWeapon")
+	virtual float GetFiringNoiseLoudness() const;
+
+	UFUNCTION(BlueprintCallable, Category = "GASShooter|GSWeapon")
+	virtual float GetFiringNoiseMaxRange() const;
+
 	UFUNCTION(BlueprintCallable, Category = "GASShooter|Animation")
 	UAnimMontage* GetEquip3PMontage() const;
 	
@@ -176,7 +182,8 @@ protected:
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, ReplicatedUsing = OnRep_MaxPrimaryClipAmmo, Category = "GASShooter|GSWeapon|Ammo")
 	int32 MaxPrimaryClipAmmo;
 
-	// How much ammo in the clip the gun starts with. Used for things like rifle grenades.
+	// How much ammo in the clip the gun starts with.
+    // Used for things like rifle grenades.
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, ReplicatedUsing = OnRep_SecondaryClipAmmo, Category = "GASShooter|GSWeapon|Ammo")
 	int32 SecondaryClipAmmo;
 
@@ -185,6 +192,12 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "GASShooter|GSWeapon|Ammo")
 	bool bInfiniteAmmo;
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "GASShooter|GSWeapon")
+	float FiringNoiseLoudness;
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "GASShooter|GSWeapon")
+	float FiringNoiseMaxRange;
 
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "GASShooter|UI")
 	TSubclassOf<class UGSHUDReticle> PrimaryHUDReticleClass;

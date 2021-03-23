@@ -26,8 +26,6 @@
 
 AGSHeroCharacter::AGSHeroCharacter(const class FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
-    PrimaryActorTick.bCanEverTick = true;
-
     BaseTurnRate = 45.0f;
     BaseLookUpRate = 45.0f;
     bASCInputBound = false;
@@ -76,6 +74,7 @@ AGSHeroCharacter::AGSHeroCharacter(const class FObjectInitializer& ObjectInitial
     KnockedDownTag = FGameplayTag::RequestGameplayTag("State.KnockedDown");
     InteractingTag = FGameplayTag::RequestGameplayTag("State.Interacting");
 
+    bUseFixedMovementRotation = true;
     bUseAimInput = true;
 }
 
@@ -90,6 +89,7 @@ void AGSHeroCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
     DOREPLIFETIME_CONDITION(AGSHeroCharacter, CurrentWeapon, COND_SimulatedOnly);
 
     DOREPLIFETIME_CONDITION(AGSHeroCharacter, AimingRotation, COND_SkipOwner);
+    //DOREPLIFETIME_CONDITION(AGSHeroCharacter, AimingLocation, COND_SkipOwner);
 }
 
 // Called to bind functionality to input
@@ -139,13 +139,6 @@ void AGSHeroCharacter::PossessedBy(AController* NewController)
 
         AddCharacterAbilities();
 
-        AGSPlayerController* PC = Cast<AGSPlayerController>(GetController());
-
-        if (PC)
-        {
-            PC->CreateHUD();
-        }
-
         if (AbilitySystemComponent->GetTagCount(DeadTag) > 0)
         {
             // Set Health/Mana/Stamina to their max. This is only necessary for *Respawn*.
@@ -168,42 +161,6 @@ void AGSHeroCharacter::PossessedBy(AController* NewController)
     }
 
     SetupStartupPerspective();
-}
-
-void AGSHeroCharacter::Tick(float DeltaTime)
-{
-    Super::Tick(DeltaTime);
-
-    // Update aim input
-    //if (IsLocallyControlled())
-    //{
-    //    UpdateAimInput();
-    //    Server_UpdateAimInputData(AimingRotation);
-
-    //    UpdateProjectedCameraViewLocation();
-
-    //    if (IsValid(Controller) && Controller->IsLocalPlayerController())
-    //    {
-    //        UWorld* World = GetWorld();
-    //        check(World);
-
-    //        FVector ProjectionAnchor = GetActorLocation();
-    //        FVector ProjectionNormal = GetActorUpVector();
-
-    //        ProjectionAnchor += ProjectionAnchorOffset * ProjectionNormal;
-
-    //        FVector InterpSrc = ThirdPersonCamera->GetComponentLocation();
-    //        FVector InterpDst = InterpSrc + (ProjectionAnchor-ProjectedCameraViewLocation);
-
-    //        FVector ViewInterpPos(
-    //            FMath::FInterpTo(InterpSrc.X, InterpDst.X, DeltaTime, 1.f),
-    //            FMath::FInterpTo(InterpSrc.Y, InterpDst.Y, DeltaTime, 1.f),
-    //            FMath::FInterpTo(InterpSrc.Z, InterpDst.Z, DeltaTime, 1.f)
-    //            );
-
-    //        ThirdPersonCamera->SetWorldLocation(ViewInterpPos);
-    //    }
-    //}
 }
 
 UGSFloatingStatusBarWidget* AGSHeroCharacter::GetFloatingStatusBar()
@@ -314,6 +271,35 @@ FVector AGSHeroCharacter::GetProjectionAnchorOffset() const
     return ProjectionAnchorOffset;
 }
 
+FRotator AGSHeroCharacter::GetViewRotation() const
+{
+    if (bUseAimInput)
+    {
+        return GetAimingRotation();
+    }
+    else
+    {
+        return Super::GetViewRotation();
+    }
+}
+
+FRotator AGSHeroCharacter::GetAimingRotation() const
+{
+    return AimingRotation;
+}
+
+FVector AGSHeroCharacter::GetAimingLocation() const
+{
+    return AimingLocation;
+}
+
+FVector AGSHeroCharacter::GetWeaponAttachPointLocation() const
+{
+    return GetThirdPersonMesh()->DoesSocketExist(GetWeaponAttachPoint())
+        ? GetThirdPersonMesh()->GetSocketLocation(GetWeaponAttachPoint())
+        : GetActorLocation();
+}
+
 void AGSHeroCharacter::SetAimRotation(FRotator NewAimRotation)
 {
     if (GetLocalRole() < ROLE_Authority)
@@ -326,6 +312,38 @@ void AGSHeroCharacter::SetAimRotation(FRotator NewAimRotation)
         AimingRotation = NewAimRotation;
     }
 }
+
+void AGSHeroCharacter::SetAimLocation(FVector NewAimLocation)
+{
+    if (GetLocalRole() < ROLE_Authority)
+    {
+        Server_SetAimLocation(NewAimLocation);
+        AimingLocation = NewAimLocation;
+    }
+    else
+    {
+        AimingLocation = NewAimLocation;
+    }
+}
+
+//void AGSHeroCharacter::UpdateAimRotation()
+//{
+//    USkeletalMeshComponent* Mesh3P = GetThirdPersonMesh();
+//    FName AttachPoint = GetWeaponAttachPoint();
+//
+//    if (Mesh3P->DoesSocketExist(AttachPoint))
+//    {
+//        FTransform WeaponTransform = Mesh3P->GetSocketTransform(AttachPoint, ERelativeTransformSpace::RTS_World);
+//        FVector WeaponLocation = WeaponTransform.GetLocation();
+//    }
+//    else
+//    {
+//        FVector Anchor = GetActorLocation() + GetProjectionAnchorOffset()*GetActorUpVector();
+//        FVector AimDir = (AimingLocation-Anchor).GetSafeNormal();
+//
+//        AimingRotation = FRotator(0.f, AimDir.ToOrientationRotator().Yaw, 0.f);
+//    }
+//}
 
 AGSWeapon* AGSHeroCharacter::GetCurrentWeapon() const
 {
@@ -515,7 +533,7 @@ void AGSHeroCharacter::PreviousWeapon()
     }
 }
 
-FName AGSHeroCharacter::GetWeaponAttachPoint()
+FName AGSHeroCharacter::GetWeaponAttachPoint() const
 {
     return WeaponAttachPoint;
 }
@@ -709,6 +727,7 @@ void AGSHeroCharacter::PostInitializeComponents()
     StartingThirdPersonMeshLocation = GetMesh()->GetRelativeLocation();
 
     AimingRotation = GetActorRotation();
+    AimingLocation = GetActorLocation() + AimingRotation.Vector()*100.f;
     ProjectedCameraViewLocation = GetActorLocation();
 
     GetWorldTimerManager().SetTimerForNextTick(this, &AGSHeroCharacter::SpawnDefaultInventory);
@@ -750,8 +769,14 @@ void AGSHeroCharacter::MoveForward(float Value)
 {
     if (IsAlive())
     {
-        //AddMovementInput(UKismetMathLibrary::GetForwardVector(FRotator(0, GetControlRotation().Yaw, 0)), Value);
-        AddMovementInput(UKismetMathLibrary::GetForwardVector(MovementFixedRotation), Value);
+        if (bUseFixedMovementRotation)
+        {
+            AddMovementInput(UKismetMathLibrary::GetForwardVector(MovementFixedRotation), Value);
+        }
+        else
+        {
+            AddMovementInput(UKismetMathLibrary::GetForwardVector(FRotator(0, GetControlRotation().Yaw, 0)), Value);
+        }
     }
 }
 
@@ -759,101 +784,25 @@ void AGSHeroCharacter::MoveRight(float Value)
 {
     if (IsAlive())
     {
-        //AddMovementInput(UKismetMathLibrary::GetRightVector(FRotator(0, GetControlRotation().Yaw, 0)), Value);
-        AddMovementInput(UKismetMathLibrary::GetRightVector(MovementFixedRotation), Value);
+        if (bUseFixedMovementRotation)
+        {
+            AddMovementInput(UKismetMathLibrary::GetRightVector(MovementFixedRotation), Value);
+        }
+        else
+        {
+            AddMovementInput(UKismetMathLibrary::GetRightVector(FRotator(0, GetControlRotation().Yaw, 0)), Value);
+        }
     }
 }
-
-//void AGSHeroCharacter::UpdateAimInput()
-//{
-//    if (! IsValid(Controller) || ! Controller->IsLocalPlayerController())
-//    {
-//        return;
-//    }
-//
-//    APlayerController* PC = GetController<APlayerController>();
-//
-//    if (! IsValid(PC))
-//    {
-//        return;
-//    }
-//
-//    UWorld* World = GetWorld();
-//    check(World);
-//
-//    FVector ProjectionAnchor = GetActorLocation();
-//    FVector ProjectionNormal = GetActorUpVector();
-//
-//    ProjectionAnchor += ProjectionAnchorOffset * ProjectionNormal;
-//
-//    FVector2D MouseViewportPos(UWidgetLayoutLibrary::GetMousePositionOnViewport(World));
-//    FVector MouseWorldPos;
-//    FVector MouseWorldDir;
-//
-//    UGameplayStatics::DeprojectScreenToWorld(
-//        PC,
-//        MouseViewportPos,
-//        MouseWorldPos,
-//        MouseWorldDir
-//        );
-//
-//    FVector MouseProjected = FMath::RayPlaneIntersection(
-//        MouseWorldPos,
-//        MouseWorldDir,
-//        FPlane(ProjectionAnchor, ProjectionNormal)
-//        );
-//
-//    FVector MouseProjectionDelta(MouseProjected-ProjectionAnchor);
-//
-//    if (MouseProjectionDelta.SizeSquared() > 0.f)
-//    {
-//        FRotator ControlRot(MouseProjectionDelta.GetUnsafeNormal().ToOrientationRotator());
-//
-//        AimingRotation = FRotator(0, ControlRot.Yaw, 0);
-//
-//        PC->SetControlRotation(AimingRotation);
-//    }
-//
-//    AimingLocation = MouseProjected;
-//}
-
-//void AGSHeroCharacter::UpdateProjectedCameraViewLocation()
-//{
-//    if (! IsValid(Controller) || ! Controller->IsLocalPlayerController())
-//    {
-//        return;
-//    }
-//
-//    UWorld* World = GetWorld();
-//    check(World);
-//
-//    FVector ProjectionAnchor = GetActorLocation();
-//    FVector ProjectionNormal = GetActorUpVector();
-//
-//    ProjectionAnchor += ProjectionAnchorOffset * ProjectionNormal;
-//
-//    FVector CameraWorldPos = ThirdPersonCamera->GetComponentLocation();
-//    FVector CameraWorldDir = ThirdPersonCamera->GetForwardVector();
-//
-//    FVector ViewProjected = FMath::RayPlaneIntersection(
-//        CameraWorldPos,
-//        CameraWorldDir,
-//        FPlane(ProjectionAnchor, ProjectionNormal)
-//        );
-//
-//    FVector ViewProjectionDelta(ViewProjected-ProjectionAnchor);
-//
-//    ProjectedCameraViewLocation = ViewProjected;
-//}
-
-//void AGSHeroCharacter::Server_UpdateAimInputData_Implementation(FRotator NewAimRotation)
-//{
-//    AimingRotation = NewAimRotation;
-//}
 
 void AGSHeroCharacter::Server_SetAimRotation_Implementation(FRotator NewAimRotation)
 {
     SetAimRotation(NewAimRotation);
+}
+
+void AGSHeroCharacter::Server_SetAimLocation_Implementation(FVector NewAimLocation)
+{
+    SetAimLocation(NewAimLocation);
 }
 
 void AGSHeroCharacter::InitializeFloatingStatusBar()
@@ -1114,6 +1063,8 @@ void AGSHeroCharacter::SetCurrentWeapon(AGSWeapon* NewWeapon, AGSWeapon* LastWea
         // This will clear HUD, tags etc
         UnEquipCurrentWeapon();
     }
+
+    OnCurrentWeaponChanged.Broadcast(LastWeapon, NewWeapon);
 }
 
 void AGSHeroCharacter::UnEquipWeapon(AGSWeapon* WeaponToUnEquip)
@@ -1161,10 +1112,13 @@ void AGSHeroCharacter::UnEquipCurrentWeapon()
 void AGSHeroCharacter::CurrentWeaponPrimaryClipAmmoChanged(int32 OldPrimaryClipAmmo, int32 NewPrimaryClipAmmo)
 {
     AGSPlayerController* PC = GetController<AGSPlayerController>();
+
     if (PC && PC->IsLocalController())
     {
         PC->SetPrimaryClipAmmo(NewPrimaryClipAmmo);
     }
+
+    OnCurrentWeaponPrimaryClipAmmoChanged.Broadcast(OldPrimaryClipAmmo, NewPrimaryClipAmmo);
 }
 
 void AGSHeroCharacter::CurrentWeaponSecondaryClipAmmoChanged(int32 OldSecondaryClipAmmo, int32 NewSecondaryClipAmmo)

@@ -10,12 +10,22 @@
 #include "UI/GSHUD.h"
 #include "UI/GSHUDWidget.h"
 #include "Weapons/GSWeapon.h"
+#include "GSBlueprintFunctionLibrary.h"
 
+#include "Kismet/KismetSystemLibrary.h"
 #include "PaperSprite.h"
 
 void AGSPlayerController::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
+
+    //if (IsLocalPlayerController())
+    //{
+    //    UE_LOG(LogTemp, Warning, TEXT("CHECK %d %s (%s)"),
+    //        IsValid(HeroCharacter),
+    //        *FString(__FUNCTION__),
+    //        *UGSBlueprintFunctionLibrary::GetPlayerEditorWindowRole(GetWorld()));
+    //}
 
     if (IsValid(HeroCharacter) && IsLocalPlayerController())
     {
@@ -53,6 +63,9 @@ void AGSPlayerController::UpdatePawnControlProjection(float DeltaTime)
 
     // Mouse position (no DPI scale) on viewport
     FVector2D MouseViewportPos(UWidgetLayoutLibrary::GetMousePositionOnViewport(World));
+
+    // Viewport anchor to mouse delta
+    FVector2D ViewportAnchorToMouse = (MouseViewportPos-ViewportAnchor);
 
     // Clamp mouse position only if they are out viewport
     if (bClampMousePosition && (
@@ -97,12 +110,32 @@ void AGSPlayerController::UpdatePawnControlProjection(float DeltaTime)
 
     if (MouseProjectionDelta.SizeSquared() > 0.f)
     {
-        FRotator AimRot(MouseProjectionDelta.GetUnsafeNormal().ToOrientationRotator());
+        FVector AimDir(MouseProjectionDelta.GetUnsafeNormal());
+        FRotator AimRot(AimDir.ToOrientationRotator());
+
         AimRot = FRotator(0, AimRot.Yaw, 0);
 
         HeroCharacter->SetAimRotation(AimRot);
         SetControlRotation(AimRot);
+
+        // Update projected aim screen location
+
+        FVector WeaponAnchorWorld(HeroCharacter->GetWeaponAttachPointLocation());
+        FVector2D WeaponAnchorScreen;
+
+        UGameplayStatics::ProjectWorldToScreen(
+            this,
+            WeaponAnchorWorld,
+            WeaponAnchorScreen
+            );
+
+        // Find screen location closest to the mouse cursor
+        // and weapon aim screen projected line
+        const FVector2D WeaponDir = ViewportAnchorToMouse.GetSafeNormal();
+        ProjectedAimScreenLocation = WeaponAnchorScreen + (WeaponDir * ((MouseViewportPos-WeaponAnchorScreen) | WeaponDir));
     }
+
+    HeroCharacter->SetAimLocation(MouseProjected);
 
     // Reprojected camera position
 
@@ -121,24 +154,44 @@ void AGSPlayerController::UpdatePawnControlProjection(float DeltaTime)
     FVector ViewDst = ViewSrc;
 
     {
+        // Viewport extents
         FVector2D Exts = (ViewportSize*.5f)-ViewportSpanSize;
-        FVector2D ViewportAnchorToMouse = MouseViewportPos-ViewportAnchor;
 
-        if (FMath::Abs(ViewportAnchorToMouse.X) > Exts.X)
+        // Viewport anchor to mouse delta, divided by two.
+        //
+        // View target is half the distance between
+        // viewport anchor to mouse position to make sure
+        // camera is not going to chase mouse cursor indefinitely.
+        FVector2D ViewTarget = ViewportAnchorToMouse*.5f;
+
+        // Bound to max camera distance
         {
-            ViewportAnchorToMouse.X = ViewportAnchorToMouse.X > 0.f
+            const float MaxSize = MaxCameraDistance;
+            const float SquaredSize = ViewTarget.SizeSquared();
+
+            if (SquaredSize > FMath::Square(MaxSize))
+            {
+                const float Scale = MaxSize * FMath::InvSqrt(SquaredSize);
+                ViewTarget.X *= Scale;
+                ViewTarget.Y *= Scale;
+            }
+        }
+
+        if (FMath::Abs(ViewTarget.X) > Exts.X)
+        {
+            ViewTarget.X = ViewTarget.X > 0.f
                 ? Exts.X
                 : -Exts.X;
         }
 
-        if (FMath::Abs(ViewportAnchorToMouse.Y) > Exts.Y)
+        if (FMath::Abs(ViewTarget.Y) > Exts.Y)
         {
-            ViewportAnchorToMouse.Y = ViewportAnchorToMouse.Y > 0.f
+            ViewTarget.Y = ViewTarget.Y > 0.f
                 ? Exts.Y
                 : -Exts.Y;
         }
 
-        FVector2D ViewTargetPos = ViewportAnchor+ViewportAnchorToMouse;
+        FVector2D ViewTargetPos = ViewportAnchor+ViewTarget;
 
         FVector ViewTargetWorldPos;
         FVector ViewTargetWorldDir;
@@ -168,214 +221,259 @@ void AGSPlayerController::UpdatePawnControlProjection(float DeltaTime)
 
 void AGSPlayerController::CreateHUD()
 {
-	// Only create once
-	if (UIHUDWidget)
-	{
-		return;
-	}
+    // Only create once
+    if (UIHUDWidget)
+    {
+        return;
+    }
 
-	if (!UIHUDWidgetClass)
-	{
-		UE_LOG(LogTemp, Error, TEXT("%s() Missing UIHUDWidgetClass. Please fill in on the Blueprint of the PlayerController."), *FString(__FUNCTION__));
-		return;
-	}
+    if (!UIHUDWidgetClass)
+    {
+        UE_LOG(LogTemp, Error, TEXT("%s() Missing UIHUDWidgetClass. Please fill in on the Blueprint of the PlayerController."), *FString(__FUNCTION__));
+        return;
+    }
 
-	// Only create a HUD for local player
-	if (!IsLocalPlayerController())
-	{
-		return;
-	}
+    // Only create a HUD for local player
+    if (!IsLocalPlayerController())
+    {
+        return;
+    }
 
-	// Need a valid PlayerState to get attributes from
-	AGSPlayerState* PS = GetPlayerState<AGSPlayerState>();
-	if (!PS)
-	{
-		return;
-	}
+    UIHUDWidget = CreateWidget<UGSHUDWidget>(this, UIHUDWidgetClass);
+    UIHUDWidget->AddToViewport();
 
-	UIHUDWidget = CreateWidget<UGSHUDWidget>(this, UIHUDWidgetClass);
-	UIHUDWidget->AddToViewport();
+    // Update HUD information
+    UpdateHUD();
+}
 
-	// Set attributes
-	UIHUDWidget->SetCurrentHealth(PS->GetHealth());
-	UIHUDWidget->SetMaxHealth(PS->GetMaxHealth());
-	UIHUDWidget->SetHealthPercentage(PS->GetHealth() / PS->GetMaxHealth());
-	UIHUDWidget->SetCurrentMana(PS->GetMana());
-	UIHUDWidget->SetMaxMana(PS->GetMaxMana());
-	UIHUDWidget->SetManaPercentage(PS->GetMana() / PS->GetMaxMana());
-	UIHUDWidget->SetHealthRegenRate(PS->GetHealthRegenRate());
-	UIHUDWidget->SetManaRegenRate(PS->GetManaRegenRate());
-	UIHUDWidget->SetCurrentStamina(PS->GetStamina());
-	UIHUDWidget->SetMaxStamina(PS->GetMaxStamina());
-	UIHUDWidget->SetStaminaPercentage(PS->GetStamina() / PS->GetMaxStamina());
-	UIHUDWidget->SetStaminaRegenRate(PS->GetStaminaRegenRate());
-	UIHUDWidget->SetCurrentShield(PS->GetShield());
-	UIHUDWidget->SetMaxShield(PS->GetMaxShield());
-	UIHUDWidget->SetShieldRegenRate(PS->GetShieldRegenRate());
-	UIHUDWidget->SetShieldPercentage(PS->GetShield() / PS->GetMaxShield());
-	UIHUDWidget->SetExperience(PS->GetXP());
-	UIHUDWidget->SetGold(PS->GetGold());
-	UIHUDWidget->SetHeroLevel(PS->GetCharacterLevel());
+void AGSPlayerController::UpdateHUD()
+{
+    // Only update if HUD widget have already been created
+    if (! UIHUDWidget)
+    {
+        return;
+    }
 
-	HeroCharacter = GetPawn<AGSHeroCharacter>();
+    // Only create a HUD for local player
+    if (!IsLocalPlayerController())
+    {
+        return;
+    }
 
-	if (HeroCharacter)
-	{
-		AGSWeapon* CurrentWeapon = HeroCharacter->GetCurrentWeapon();
+    // Need a valid PlayerState to get attributes from
+    AGSPlayerState* PS = GetPlayerState<AGSPlayerState>();
+    if (!PS)
+    {
+        return;
+    }
 
-		if (CurrentWeapon)
-		{
-			UIHUDWidget->SetEquippedWeaponSprite(CurrentWeapon->PrimaryIcon);
-			UIHUDWidget->SetEquippedWeaponStatusText(CurrentWeapon->GetDefaultStatusText());
-			UIHUDWidget->SetPrimaryClipAmmo(HeroCharacter->GetPrimaryClipAmmo());
-			UIHUDWidget->SetReticle(CurrentWeapon->GetPrimaryHUDReticleClass());
+    // Set attributes
+    UIHUDWidget->SetCurrentHealth(PS->GetHealth());
+    UIHUDWidget->SetMaxHealth(PS->GetMaxHealth());
+    UIHUDWidget->SetHealthPercentage(PS->GetHealth() / PS->GetMaxHealth());
+    UIHUDWidget->SetCurrentMana(PS->GetMana());
+    UIHUDWidget->SetMaxMana(PS->GetMaxMana());
+    UIHUDWidget->SetManaPercentage(PS->GetMana() / PS->GetMaxMana());
+    UIHUDWidget->SetHealthRegenRate(PS->GetHealthRegenRate());
+    UIHUDWidget->SetManaRegenRate(PS->GetManaRegenRate());
+    UIHUDWidget->SetCurrentStamina(PS->GetStamina());
+    UIHUDWidget->SetMaxStamina(PS->GetMaxStamina());
+    UIHUDWidget->SetStaminaPercentage(PS->GetStamina() / PS->GetMaxStamina());
+    UIHUDWidget->SetStaminaRegenRate(PS->GetStaminaRegenRate());
+    UIHUDWidget->SetCurrentShield(PS->GetShield());
+    UIHUDWidget->SetMaxShield(PS->GetMaxShield());
+    UIHUDWidget->SetShieldRegenRate(PS->GetShieldRegenRate());
+    UIHUDWidget->SetShieldPercentage(PS->GetShield() / PS->GetMaxShield());
+    UIHUDWidget->SetExperience(PS->GetXP());
+    UIHUDWidget->SetGold(PS->GetGold());
+    UIHUDWidget->SetHeroLevel(PS->GetCharacterLevel());
 
-			// PlayerState's Pawn isn't set up yet so we can't just call PS->GetPrimaryReserveAmmo()
-			if (PS->GetAmmoAttributeSet())
-			{
-				FGameplayAttribute Attribute = PS->GetAmmoAttributeSet()->GetReserveAmmoAttributeFromTag(CurrentWeapon->PrimaryAmmoType);
-				if (Attribute.IsValid())
-				{
-					UIHUDWidget->SetPrimaryReserveAmmo(PS->GetAbilitySystemComponent()->GetNumericAttribute(Attribute));
-				}
-			}
-		}
-	}
+    if (HeroCharacter)
+    {
+        AGSWeapon* CurrentWeapon = HeroCharacter->GetCurrentWeapon();
+
+        if (CurrentWeapon)
+        {
+            UIHUDWidget->SetEquippedWeaponSprite(CurrentWeapon->PrimaryIcon);
+            UIHUDWidget->SetEquippedWeaponStatusText(CurrentWeapon->GetDefaultStatusText());
+            UIHUDWidget->SetPrimaryClipAmmo(HeroCharacter->GetPrimaryClipAmmo());
+            UIHUDWidget->SetReticle(CurrentWeapon->GetPrimaryHUDReticleClass());
+
+            // PlayerState's Pawn isn't set up yet so we can't just call PS->GetPrimaryReserveAmmo()
+            if (PS->GetAmmoAttributeSet())
+            {
+                FGameplayAttribute Attribute = PS->GetAmmoAttributeSet()->GetReserveAmmoAttributeFromTag(CurrentWeapon->PrimaryAmmoType);
+                if (Attribute.IsValid())
+                {
+                    UIHUDWidget->SetPrimaryReserveAmmo(PS->GetAbilitySystemComponent()->GetNumericAttribute(Attribute));
+                }
+            }
+        }
+    }
 }
 
 UGSHUDWidget* AGSPlayerController::GetGSHUD()
 {
-	return UIHUDWidget;
+    return UIHUDWidget;
 }
 
 void AGSPlayerController::SetEquippedWeaponPrimaryIconFromSprite(UPaperSprite* InSprite)
 {
-	if (UIHUDWidget)
-	{
-		UIHUDWidget->SetEquippedWeaponSprite(InSprite);
-	}
+    if (UIHUDWidget)
+    {
+        UIHUDWidget->SetEquippedWeaponSprite(InSprite);
+    }
 }
 
 void AGSPlayerController::SetEquippedWeaponStatusText(const FText& StatusText)
 {
-	if (UIHUDWidget)
-	{
-		UIHUDWidget->SetEquippedWeaponStatusText(StatusText);
-	}
+    if (UIHUDWidget)
+    {
+        UIHUDWidget->SetEquippedWeaponStatusText(StatusText);
+    }
 }
 
 void AGSPlayerController::SetPrimaryClipAmmo(int32 ClipAmmo)
 {
-	if (UIHUDWidget)
-	{
-		UIHUDWidget->SetPrimaryClipAmmo(ClipAmmo);
-	}
+    if (UIHUDWidget)
+    {
+        UIHUDWidget->SetPrimaryClipAmmo(ClipAmmo);
+    }
 }
 
 void AGSPlayerController::SetPrimaryReserveAmmo(int32 ReserveAmmo)
 {
-	if (UIHUDWidget)
-	{
-		UIHUDWidget->SetPrimaryReserveAmmo(ReserveAmmo);
-	}
+    if (UIHUDWidget)
+    {
+        UIHUDWidget->SetPrimaryReserveAmmo(ReserveAmmo);
+    }
 }
 
 void AGSPlayerController::SetSecondaryClipAmmo(int32 SecondaryClipAmmo)
 {
-	if (UIHUDWidget)
-	{
-		UIHUDWidget->SetSecondaryClipAmmo(SecondaryClipAmmo);
-	}
+    if (UIHUDWidget)
+    {
+        UIHUDWidget->SetSecondaryClipAmmo(SecondaryClipAmmo);
+    }
 }
 
 void AGSPlayerController::SetSecondaryReserveAmmo(int32 SecondaryReserveAmmo)
 {
-	if (UIHUDWidget)
-	{
-		UIHUDWidget->SetSecondaryReserveAmmo(SecondaryReserveAmmo);
-	}
+    if (UIHUDWidget)
+    {
+        UIHUDWidget->SetSecondaryReserveAmmo(SecondaryReserveAmmo);
+    }
 }
 
 void AGSPlayerController::SetHUDReticle(TSubclassOf<UGSHUDReticle> ReticleClass)
 {
-	// !GetWorld()->bIsTearingDown Stops an error when quitting PIE while targeting when the EndAbility resets the HUD reticle
-	if (UIHUDWidget && GetWorld() && !GetWorld()->bIsTearingDown)
-	{
-		UIHUDWidget->SetReticle(ReticleClass);
-	}
+    // !GetWorld()->bIsTearingDown Stops an error when quitting PIE while targeting when the EndAbility resets the HUD reticle
+    if (UIHUDWidget && GetWorld() && !GetWorld()->bIsTearingDown)
+    {
+        UIHUDWidget->SetReticle(ReticleClass);
+    }
 }
 
 void AGSPlayerController::ShowDamageNumber_Implementation(float DamageAmount, AGSCharacterBase* TargetCharacter, FGameplayTagContainer DamageNumberTags)
 {
-	if (IsValid(TargetCharacter))
-	{
-		TargetCharacter->AddDamageNumber(DamageAmount, DamageNumberTags);
-	}
+    if (IsValid(TargetCharacter))
+    {
+        TargetCharacter->AddDamageNumber(DamageAmount, DamageNumberTags);
+    }
 }
 
 bool AGSPlayerController::ShowDamageNumber_Validate(float DamageAmount, AGSCharacterBase* TargetCharacter, FGameplayTagContainer DamageNumberTags)
 {
-	return true;
+    return true;
 }
 
 void AGSPlayerController::SetRespawnCountdown_Implementation(float RespawnTimeRemaining)
 {
-	if (UIHUDWidget)
-	{
-		UIHUDWidget->SetRespawnCountdown(RespawnTimeRemaining);
-	}
+    if (UIHUDWidget)
+    {
+        UIHUDWidget->SetRespawnCountdown(RespawnTimeRemaining);
+    }
 }
 
 bool AGSPlayerController::SetRespawnCountdown_Validate(float RespawnTimeRemaining)
 {
-	return true;
+    return true;
 }
 
 void AGSPlayerController::ClientSetControlRotation_Implementation(FRotator NewRotation)
 {
-	SetControlRotation(NewRotation);
+    SetControlRotation(NewRotation);
 }
 
 bool AGSPlayerController::ClientSetControlRotation_Validate(FRotator NewRotation)
 {
-	return true;
+    return true;
 }
 
 void AGSPlayerController::OnPossess(APawn* InPawn)
 {
-	Super::OnPossess(InPawn);
+    Super::OnPossess(InPawn);
 
-	AGSPlayerState* PS = GetPlayerState<AGSPlayerState>();
-	if (PS)
-	{
-		// Init ASC with PS (Owner) and our new Pawn (AvatarActor)
-		PS->GetAbilitySystemComponent()->InitAbilityActorInfo(PS, InPawn);
-	}
+    AGSPlayerState* PS = GetPlayerState<AGSPlayerState>();
+    if (PS)
+    {
+        // Init ASC with PS (Owner) and our new Pawn (AvatarActor)
+        PS->GetAbilitySystemComponent()->InitAbilityActorInfo(PS, InPawn);
+    }
+
+    // Create HUD if on standalone mode
+    if (UKismetSystemLibrary::IsStandalone(this))
+    {
+        CreateHUD();
+    }
 }
 
 void AGSPlayerController::OnRep_PlayerState()
 {
-	Super::OnRep_PlayerState();
+    Super::OnRep_PlayerState();
 
-	// For edge cases where the PlayerState is repped before the Hero is possessed.
-	CreateHUD();
+    // For edge cases where the PlayerState is repped before the Hero is possessed.
+    CreateHUD();
+}
+
+void AGSPlayerController::AcknowledgePossession(APawn* P)
+{
+    Super::AcknowledgePossession(P);
+
+    HeroCharacter = Cast<AGSHeroCharacter>(P);
+
+    //UE_LOG(LogTemp, Warning, TEXT("CHECK %d %s (%s)"),
+    //    IsValid(HeroCharacter),
+    //    *FString(__FUNCTION__),
+    //    *UGSBlueprintFunctionLibrary::GetPlayerEditorWindowRole(GetWorld()));
+
+    // Update HUD information if there is valid character
+    if (IsValid(HeroCharacter))
+    {
+        UpdateHUD();
+    }
 }
 
 void AGSPlayerController::Kill()
 {
-	ServerKill();
+    ServerKill();
 }
 
 void AGSPlayerController::ServerKill_Implementation()
 {
-	AGSPlayerState* PS = GetPlayerState<AGSPlayerState>();
-	if (PS)
-	{
-		PS->GetAttributeSetBase()->SetHealth(0.0f);
-	}
+    AGSPlayerState* PS = GetPlayerState<AGSPlayerState>();
+    if (PS)
+    {
+        PS->GetAttributeSetBase()->SetHealth(0.0f);
+    }
 }
 
 bool AGSPlayerController::ServerKill_Validate()
 {
-	return true;
+    return true;
+}
+
+FVector2D AGSPlayerController::GetProjectedAimScreenLocation()
+{
+    return ProjectedAimScreenLocation;
 }

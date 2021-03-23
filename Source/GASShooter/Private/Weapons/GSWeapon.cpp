@@ -34,6 +34,9 @@ AGSWeapon::AGSWeapon()
     PrimaryAmmoType = FGameplayTag::RequestGameplayTag(FName("Weapon.Ammo.None"));
     SecondaryAmmoType = FGameplayTag::RequestGameplayTag(FName("Weapon.Ammo.None"));
 
+    FiringNoiseLoudness = 1.f;
+    FiringNoiseMaxRange = 2000.f;
+
     CollisionComp = CreateDefaultSubobject<UCapsuleComponent>(FName("CollisionComponent"));
     CollisionComp->InitCapsuleSize(40.0f, 50.0f);
     CollisionComp->SetCollisionObjectType(COLLISION_PICKUP);
@@ -305,6 +308,16 @@ TSubclassOf<UGSHUDReticle> AGSWeapon::GetPrimaryHUDReticleClass() const
 bool AGSWeapon::HasInfiniteAmmo() const
 {
     return bInfiniteAmmo;
+}
+
+float AGSWeapon::GetFiringNoiseLoudness() const
+{
+    return FiringNoiseLoudness;
+}
+
+float AGSWeapon::GetFiringNoiseMaxRange() const
+{
+    return FiringNoiseMaxRange;
 }
 
 UAnimMontage* AGSWeapon::GetEquip3PMontage() const
