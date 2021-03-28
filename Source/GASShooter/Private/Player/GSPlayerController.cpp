@@ -148,8 +148,12 @@ void AGSPlayerController::UpdatePawnControlProjection(float DeltaTime)
 
         AimRot = FRotator(0, AimRot.Yaw, 0);
 
-        HeroCharacter->SetAimRotation(AimRot);
-        SetControlRotation(AimRot);
+        // Only update if yaw rotation changed
+        if (! FMath::IsNearlyEqual(AimRot.Yaw, HeroCharacter->GetAimingRotation().Yaw))
+        {
+            HeroCharacter->SetAimingRotation(AimRot);
+            SetControlRotation(AimRot);
+        }
 
         // Update projected aim screen location
 
@@ -162,13 +166,11 @@ void AGSPlayerController::UpdatePawnControlProjection(float DeltaTime)
             WeaponAnchorScreen
             );
 
-        // Find screen location closest to the mouse cursor
+        // Calculate screen location closest to the mouse cursor
         // and weapon aim screen projected line
         const FVector2D WeaponDir = ViewportAnchorToMouse.GetSafeNormal();
         ProjectedAimScreenLocation = WeaponAnchorScreen + (WeaponDir * ((MouseViewportPos-WeaponAnchorScreen) | WeaponDir));
     }
-
-    HeroCharacter->SetAimLocation(MouseProjected);
 
     // Reprojected camera position
 

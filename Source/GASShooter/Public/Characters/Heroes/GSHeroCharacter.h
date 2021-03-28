@@ -87,16 +87,12 @@ public:
 
     FVector GetProjectionAnchorOffset() const;
 
-    void SetAimRotation(FRotator NewAimRotation);
-    void SetAimLocation(FVector NewAimLocation);
+    void SetAimingRotation(FRotator NewAimRotation);
 
 	virtual FRotator GetViewRotation() const override;
 
 	UFUNCTION(BlueprintCallable)
 	FRotator GetAimingRotation() const;
-
-	UFUNCTION(BlueprintCallable)
-	FVector GetAimingLocation() const;
 
 	UFUNCTION(BlueprintCallable)
 	FVector GetWeaponAttachPointLocation() const;
@@ -292,10 +288,6 @@ protected:
 	UPROPERTY(Replicated)
 	FRotator AimingRotation;
 
-	//UPROPERTY(Replicated)
-	UPROPERTY()
-	FVector AimingLocation;
-
 	UPROPERTY(BlueprintReadOnly)
     FVector ProjectedCameraViewLocation;
 
@@ -333,11 +325,8 @@ protected:
 	// Mouse + Gamepad
 	void MoveRight(float Value);
 
-	UFUNCTION(BlueprintCallable, Server, Unreliable)
-	void Server_SetAimRotation(FRotator NewAimRotation);
-
-	UFUNCTION(BlueprintCallable, Server, Unreliable)
-	void Server_SetAimLocation(FVector NewAimLocation);
+	UFUNCTION(BlueprintCallable, Server, Reliable)
+	void Server_SetAimingRotation(FRotator NewAimRotation);
 
 	// Creates and initializes the floating status bar for heroes.
 	// Safe to call many times because it checks to make sure it only executes once.

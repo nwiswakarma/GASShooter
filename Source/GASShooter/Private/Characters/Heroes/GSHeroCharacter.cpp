@@ -83,7 +83,6 @@ void AGSHeroCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
     DOREPLIFETIME_CONDITION(AGSHeroCharacter, CurrentWeapon, COND_SimulatedOnly);
 
     DOREPLIFETIME_CONDITION(AGSHeroCharacter, AimingRotation, COND_SkipOwner);
-    //DOREPLIFETIME_CONDITION(AGSHeroCharacter, AimingLocation, COND_SkipOwner);
 }
 
 // Called to bind functionality to input
@@ -250,89 +249,12 @@ void AGSHeroCharacter::FinishDying()
     Super::FinishDying();
 }
 
-USkeletalMeshComponent* AGSHeroCharacter::GetMainMesh() const
-{
-    return GetMesh();
-}
-
-FVector AGSHeroCharacter::GetProjectionAnchorOffset() const
-{
-    return ProjectionAnchorOffset;
-}
-
-FRotator AGSHeroCharacter::GetViewRotation() const
-{
-    if (bUseAimInput)
-    {
-        return GetAimingRotation();
-    }
-    else
-    {
-        return Super::GetViewRotation();
-    }
-}
-
-FRotator AGSHeroCharacter::GetAimingRotation() const
-{
-    return AimingRotation;
-}
-
-FVector AGSHeroCharacter::GetAimingLocation() const
-{
-    return AimingLocation;
-}
-
 FVector AGSHeroCharacter::GetWeaponAttachPointLocation() const
 {
     return GetMainMesh()->DoesSocketExist(GetWeaponAttachPoint())
         ? GetMainMesh()->GetSocketLocation(GetWeaponAttachPoint())
         : GetActorLocation();
 }
-
-void AGSHeroCharacter::SetAimRotation(FRotator NewAimRotation)
-{
-    if (GetLocalRole() < ROLE_Authority)
-    {
-        Server_SetAimRotation(NewAimRotation);
-        AimingRotation = NewAimRotation;
-    }
-    else
-    {
-        AimingRotation = NewAimRotation;
-    }
-}
-
-void AGSHeroCharacter::SetAimLocation(FVector NewAimLocation)
-{
-    if (GetLocalRole() < ROLE_Authority)
-    {
-        Server_SetAimLocation(NewAimLocation);
-        AimingLocation = NewAimLocation;
-    }
-    else
-    {
-        AimingLocation = NewAimLocation;
-    }
-}
-
-//void AGSHeroCharacter::UpdateAimRotation()
-//{
-//    USkeletalMeshComponent* Mesh3P = GetMainMesh();
-//    FName AttachPoint = GetWeaponAttachPoint();
-//
-//    if (Mesh3P->DoesSocketExist(AttachPoint))
-//    {
-//        FTransform WeaponTransform = Mesh3P->GetSocketTransform(AttachPoint, ERelativeTransformSpace::RTS_World);
-//        FVector WeaponLocation = WeaponTransform.GetLocation();
-//    }
-//    else
-//    {
-//        FVector Anchor = GetActorLocation() + GetProjectionAnchorOffset()*GetActorUpVector();
-//        FVector AimDir = (AimingLocation-Anchor).GetSafeNormal();
-//
-//        AimingRotation = FRotator(0.f, AimDir.ToOrientationRotator().Yaw, 0.f);
-//    }
-//}
 
 AGSWeapon* AGSHeroCharacter::GetCurrentWeapon() const
 {
@@ -355,7 +277,8 @@ bool AGSHeroCharacter::AddWeaponToInventory(AGSWeapon* NewWeapon, bool bEquipWea
             return false;
         }
 
-        // Create a dynamic instant Gameplay Effect to give the primary and secondary ammo
+        // Create a dynamic instant Gameplay Effect
+        // to give the primary and secondary ammo
         UGameplayEffect* GEAmmo = NewObject<UGameplayEffect>(GetTransientPackage(), FName(TEXT("Ammo")));
         GEAmmo->DurationPolicy = EGameplayEffectDurationType::Instant;
 
@@ -693,10 +616,15 @@ void AGSHeroCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
     //InteractionCanceledDelegate.Broadcast();
     Execute_InteractableCancelInteraction(this, GetMainMesh());
 
-    // Clear CurrentWeaponTag on the ASC. This happens naturally in UnEquipCurrentWeapon() but
-    // that is only called on the server from hero death (the OnRep_CurrentWeapon() would have
-    // handled it on the client but that is never called due to the hero being marked pending
-    // destroy). This makes sure the client has it cleared.
+    // Clear CurrentWeaponTag on the ASC.
+    //
+    // This happens naturally in UnEquipCurrentWeapon()
+    // but that is only called on the server from hero death
+    // (the OnRep_CurrentWeapon() would have handled it
+    // on the client but that is never called due to
+    // the hero being marked pending destroy).
+    //
+    // This makes sure the client has it cleared.
     if (AbilitySystemComponent)
     {
         AbilitySystemComponent->RemoveLooseGameplayTag(CurrentWeaponTag);
@@ -714,7 +642,6 @@ void AGSHeroCharacter::PostInitializeComponents()
     StartingThirdPersonMeshLocation = GetMainMesh()->GetRelativeLocation();
 
     AimingRotation = GetActorRotation();
-    AimingLocation = GetActorLocation() + AimingRotation.Vector()*100.f;
     ProjectedCameraViewLocation = GetActorLocation();
 
     GetWorldTimerManager().SetTimerForNextTick(this, &AGSHeroCharacter::SpawnDefaultInventory);
@@ -782,14 +709,60 @@ void AGSHeroCharacter::MoveRight(float Value)
     }
 }
 
-void AGSHeroCharacter::Server_SetAimRotation_Implementation(FRotator NewAimRotation)
+USkeletalMeshComponent* AGSHeroCharacter::GetMainMesh() const
 {
-    SetAimRotation(NewAimRotation);
+    return GetMesh();
 }
 
-void AGSHeroCharacter::Server_SetAimLocation_Implementation(FVector NewAimLocation)
+FVector AGSHeroCharacter::GetProjectionAnchorOffset() const
 {
-    SetAimLocation(NewAimLocation);
+    return ProjectionAnchorOffset;
+}
+
+FRotator AGSHeroCharacter::GetViewRotation() const
+{
+    if (bUseAimInput)
+    {
+        return GetAimingRotation();
+    }
+    else
+    {
+        return Super::GetViewRotation();
+    }
+}
+
+FRotator AGSHeroCharacter::GetAimingRotation() const
+{
+    return AimingRotation;
+}
+
+void AGSHeroCharacter::SetAimingRotation(FRotator NewAimRotation)
+{
+    if (GetLocalRole() < ROLE_Authority)
+    {
+        Server_SetAimingRotation(NewAimRotation);
+        AimingRotation = NewAimRotation;
+    }
+    else
+    {
+        AimingRotation = NewAimRotation;
+    }
+}
+
+void AGSHeroCharacter::Server_SetAimingRotation_Implementation(FRotator NewAimRotation)
+{
+    SetAimingRotation(NewAimRotation);
+}
+
+void AGSHeroCharacter::BindASCInput()
+{
+    if (!bASCInputBound && IsValid(AbilitySystemComponent) && IsValid(InputComponent))
+    {
+        AbilitySystemComponent->BindAbilityActivationToInputComponent(InputComponent, FGameplayAbilityInputBinds(FString("ConfirmTarget"),
+            FString("CancelTarget"), FString("EGSAbilityInputID"), static_cast<int32>(EGSAbilityInputID::Confirm), static_cast<int32>(EGSAbilityInputID::Cancel)));
+
+        bASCInputBound = true;
+    }
 }
 
 void AGSHeroCharacter::InitializeFloatingStatusBar()
@@ -908,17 +881,6 @@ void AGSHeroCharacter::OnRep_Controller()
     SetupStartupPerspective();
 }
 
-void AGSHeroCharacter::BindASCInput()
-{
-    if (!bASCInputBound && IsValid(AbilitySystemComponent) && IsValid(InputComponent))
-    {
-        AbilitySystemComponent->BindAbilityActivationToInputComponent(InputComponent, FGameplayAbilityInputBinds(FString("ConfirmTarget"),
-            FString("CancelTarget"), FString("EGSAbilityInputID"), static_cast<int32>(EGSAbilityInputID::Confirm), static_cast<int32>(EGSAbilityInputID::Cancel)));
-
-        bASCInputBound = true;
-    }
-}
-
 void AGSHeroCharacter::SpawnDefaultInventory()
 {
     if (GetLocalRole() < ROLE_Authority)
@@ -949,29 +911,16 @@ void AGSHeroCharacter::SetupStartupPerspective()
 {
     APlayerController* PC = Cast<APlayerController>(GetController());
 
-    if (PC && PC->IsLocalController())
+    // Assign view target if player controlled and has valid camera
+    if (PC && PC->IsLocalController() && IsValid(GetCamera()))
     {
-        if (IsValid(AbilitySystemComponent))
-        {
-            return;
-        }
-
-        // No valid camera, abort
-        if (! IsValid(GetCamera()))
-        {
-            return;
-        }
-
-        // Assign view target
-
         GetCamera()->Activate();
         PC->SetViewTarget(this);
-
-        GetMainMesh()->SetVisibility(true, true);
-
-        // Reset the third person mesh
-        GetMainMesh()->SetRelativeLocation(StartingThirdPersonMeshLocation);
     }
+
+    // Reset the main mesh
+    GetMainMesh()->SetVisibility(true, true);
+    GetMainMesh()->SetRelativeLocation(StartingThirdPersonMeshLocation);
 }
 
 bool AGSHeroCharacter::DoesWeaponExistInInventory(AGSWeapon* InWeapon)
