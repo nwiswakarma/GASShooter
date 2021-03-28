@@ -83,9 +83,7 @@ public:
     * Getters for character perspective
     **/
 
-	virtual USkeletalMeshComponent* GetThirdPersonMesh() const override;
-
-	UCameraComponent* GetThirdPersonCamera();
+	virtual USkeletalMeshComponent* GetMainMesh() const override;
 
     FVector GetProjectionAnchorOffset() const;
 
@@ -220,12 +218,6 @@ protected:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "GASShooter|Camera")
 	float BaseLookUpRate;
 
-	UPROPERTY(BlueprintReadOnly, Category = "GASShooter|Camera")
-	float StartingThirdPersonCameraBoomArmLength;
-
-	UPROPERTY(BlueprintReadOnly, Category = "GASShooter|Camera")
-	FVector StartingThirdPersonCameraBoomLocation;
-
 	bool bASCInputBound;
 
 	// Set to true when we change the weapon predictively and flip it to false when the Server replicates to confirm.
@@ -233,17 +225,8 @@ protected:
 	// with the correct CurrentWeapon.
 	bool bChangedWeaponLocally;
 
-	UPROPERTY(BlueprintReadOnly, Category = "GASShooter|Camera")
-	float Default3PFOV;
-
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "GASShooter|GSHeroCharacter")
 	FName WeaponAttachPoint;
-
-	UPROPERTY(BlueprintReadOnly, VisibleAnywhere, Category = "GASShooter|Camera")
-	class USpringArmComponent* ThirdPersonCameraBoom;
-
-	UPROPERTY(BlueprintReadOnly, VisibleAnywhere, Category = "GASShooter|Camera")
-	UCameraComponent* ThirdPersonCamera;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "GASShooter|UI")
 	TSubclassOf<class UGSFloatingStatusBarWidget> UIFloatingStatusBarClass;

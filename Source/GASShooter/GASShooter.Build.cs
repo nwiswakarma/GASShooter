@@ -13,6 +13,7 @@ public class GASShooter : ModuleRules
             "CoreUObject",
             "Engine",
             "InputCore",
+            "Factions"
             });
 
 		PrivateDependencyModuleNames.AddRange(new string[] {

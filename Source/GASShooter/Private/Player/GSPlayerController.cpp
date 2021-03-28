@@ -10,10 +10,37 @@
 #include "UI/GSHUD.h"
 #include "UI/GSHUDWidget.h"
 #include "Weapons/GSWeapon.h"
+#include "Weapons/GSUTProjectile.h"
 #include "GSBlueprintFunctionLibrary.h"
 
 #include "Kismet/KismetSystemLibrary.h"
 #include "PaperSprite.h"
+
+AGSPlayerController::AGSPlayerController(const class FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
+{
+	PredictionFudgeFactor = 20.f;
+	MaxPredictionPing = 0.f; 
+	DesiredPredictionPing = 120.f;
+	bIsDebuggingProjectiles = false;
+}
+
+void AGSPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME_CONDITION(AGSPlayerController, PredictionFudgeFactor, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AGSPlayerController, MaxPredictionPing, COND_OwnerOnly);
+}
+
+void AGSPlayerController::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (GetLocalRole() < ROLE_Authority)
+	{
+		ServerNegotiatePredictionPing(DesiredPredictionPing);
+	}
+}
 
 void AGSPlayerController::Tick(float DeltaTime)
 {
@@ -41,7 +68,13 @@ void AGSPlayerController::UpdatePawnControlProjection(float DeltaTime)
     UWorld* World = GetWorld();
     check(World);
 
-    UCameraComponent* Camera = HeroCharacter->GetThirdPersonCamera();
+    UCameraComponent* Camera = HeroCharacter->GetCamera();
+
+    // No assigned camera, return
+    if (! Camera)
+    {
+        return;
+    }
 
     check(IsValid(Camera));
 
@@ -476,4 +509,29 @@ bool AGSPlayerController::ServerKill_Validate()
 FVector2D AGSPlayerController::GetProjectedAimScreenLocation()
 {
     return ProjectedAimScreenLocation;
+}
+
+float AGSPlayerController::GetPredictionTime()
+{
+    // exact ping is in msec, divide by 1000 to get time in seconds
+    //if (Role == ROLE_Authority) { UE_LOG(UT, Warning, TEXT("Server ExactPing %f"), PlayerState->ExactPing); }
+    return (PlayerState && (GetNetMode() != NM_Standalone))
+        ? (0.0005f*FMath::Clamp(PlayerState->ExactPing - PredictionFudgeFactor, 0.f, MaxPredictionPing))
+        : 0.f;
+}
+
+float AGSPlayerController::GetProjectileSleepTime()
+{
+	return 0.001f * FMath::Max(0.f, PlayerState->ExactPing - PredictionFudgeFactor - MaxPredictionPing);
+}
+
+void AGSPlayerController::ServerNegotiatePredictionPing_Implementation(float NewPredictionPing)
+{
+	//MaxPredictionPing = FMath::Clamp(NewPredictionPing, 0.f, UUTGameEngine::StaticClass()->GetDefaultObject<UUTGameEngine>()->ServerMaxPredictionPing);
+	MaxPredictionPing = FMath::Clamp(NewPredictionPing, 0.f, 120.f);
+}
+
+bool AGSPlayerController::ServerNegotiatePredictionPing_Validate(float NewPredictionPing)
+{
+	return true;
 }

@@ -4,10 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "TimerManager.h"
 #include "AbilitySystemInterface.h"
 #include "GameplayTagContainer.h"
 #include "GASShooter/GASShooter.h"
-#include "TimerManager.h"
+#include "Factions/FactionAgentInterface.h"
 #include "GSCharacterBase.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FCharacterDiedDelegate, AGSCharacterBase*, Character);
@@ -35,7 +36,7 @@ struct GASSHOOTER_API FGSDamageNumber
 * This class should not be instantiated and instead subclassed.
 */
 UCLASS()
-class GASSHOOTER_API AGSCharacterBase : public ACharacter, public IAbilitySystemInterface
+class GASSHOOTER_API AGSCharacterBase : public ACharacter, public IAbilitySystemInterface, public IFactionAgentInterface
 {
     GENERATED_BODY()
 
@@ -71,7 +72,14 @@ public:
     **/
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "GASShooter|GSHeroCharacter")
-	virtual USkeletalMeshComponent* GetThirdPersonMesh() const
+	virtual USkeletalMeshComponent* GetMainMesh() const
+    {
+        return nullptr;
+    }
+
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, BlueprintPure, Category = "GASShooter|GSHeroCharacter")
+	UCameraComponent* GetCamera() const;
+	virtual UCameraComponent* GetCamera_Implementation() const
     {
         return nullptr;
     }
@@ -121,6 +129,9 @@ protected:
 
     TArray<FGSDamageNumber> DamageNumberQueue;
     FTimerHandle DamageNumberTimer;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "GASShooter|Factions")
+    FFaction Faction;
     
     // Reference to the ASC. It will live on the PlayerState or here if the character doesn't have a PlayerState.
     UPROPERTY()
@@ -180,4 +191,16 @@ protected:
     virtual void SetMana(float Mana);
     virtual void SetStamina(float Stamina);
     virtual void SetShield(float Shield);
+
+    /** Implements IFactionAgentInterface */
+    
+	/** Returns the current faction
+	 * @return the current faction
+	 */
+	virtual FFaction GetFaction() const override;
+
+	/** Set the current faction
+	 * @param Faction that will be assigned
+	 */
+	virtual void SetFaction(const FFaction& InFaction) override;
 };

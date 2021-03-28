@@ -354,3 +354,13 @@ void AGSCharacterBase::SetShield(float Shield)
 		AttributeSetBase->SetShield(Shield);
 	}
 }
+
+FFaction AGSCharacterBase::GetFaction() const
+{
+	return Faction;
+}
+
+void AGSCharacterBase::SetFaction(const FFaction& InFaction)
+{
+    Faction = InFaction;
+}

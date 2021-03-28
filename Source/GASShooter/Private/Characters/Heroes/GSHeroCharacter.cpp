@@ -28,25 +28,18 @@ AGSHeroCharacter::AGSHeroCharacter(const class FObjectInitializer& ObjectInitial
 {
     BaseTurnRate = 45.0f;
     BaseLookUpRate = 45.0f;
+
     bASCInputBound = false;
     bChangedWeaponLocally = false;
-    Default3PFOV = 80.0f;
+
+    Inventory = FGSHeroInventory();
+    ReviveDuration = 4.0f;
+
     NoWeaponTag = FGameplayTag::RequestGameplayTag(FName("Weapon.Equipped.None"));
     WeaponChangingDelayReplicationTag = FGameplayTag::RequestGameplayTag(FName("Ability.Weapon.IsChangingDelayReplication"));
     WeaponAmmoTypeNoneTag = FGameplayTag::RequestGameplayTag(FName("Weapon.Ammo.None"));
     WeaponAbilityTag = FGameplayTag::RequestGameplayTag(FName("Ability.Weapon"));
     CurrentWeaponTag = NoWeaponTag;
-    Inventory = FGSHeroInventory();
-    ReviveDuration = 4.0f;
-    
-    ThirdPersonCameraBoom = CreateDefaultSubobject<USpringArmComponent>(FName("CameraBoom"));
-    ThirdPersonCameraBoom->SetupAttachment(RootComponent);
-    ThirdPersonCameraBoom->bUsePawnControlRotation = true;
-    ThirdPersonCameraBoom->SetRelativeLocation(FVector(0, 50, 68.492264));
-
-    ThirdPersonCamera = CreateDefaultSubobject<UCameraComponent>(FName("FollowCamera"));
-    ThirdPersonCamera->SetupAttachment(ThirdPersonCameraBoom);
-    ThirdPersonCamera->FieldOfView = Default3PFOV;
 
     GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPose;
     GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -62,6 +55,7 @@ AGSHeroCharacter::AGSHeroCharacter(const class FObjectInitializer& ObjectInitial
     UIFloatingStatusBarComponent->SetDrawSize(FVector2D(500, 500));
 
     UIFloatingStatusBarClass = StaticLoadClass(UObject::StaticClass(), nullptr, TEXT("/Game/GASShooter/UI/UI_FloatingStatusBar_Hero.UI_FloatingStatusBar_Hero_C"));
+
     if (!UIFloatingStatusBarClass)
     {
         UE_LOG(LogTemp, Error, TEXT("%s() Failed to find UIFloatingStatusBarClass. If it was moved, please update the reference location in C++."), *FString(__FUNCTION__));
@@ -256,14 +250,9 @@ void AGSHeroCharacter::FinishDying()
     Super::FinishDying();
 }
 
-USkeletalMeshComponent* AGSHeroCharacter::GetThirdPersonMesh() const
+USkeletalMeshComponent* AGSHeroCharacter::GetMainMesh() const
 {
     return GetMesh();
-}
-
-UCameraComponent* AGSHeroCharacter::GetThirdPersonCamera()
-{
-    return ThirdPersonCamera;
 }
 
 FVector AGSHeroCharacter::GetProjectionAnchorOffset() const
@@ -295,8 +284,8 @@ FVector AGSHeroCharacter::GetAimingLocation() const
 
 FVector AGSHeroCharacter::GetWeaponAttachPointLocation() const
 {
-    return GetThirdPersonMesh()->DoesSocketExist(GetWeaponAttachPoint())
-        ? GetThirdPersonMesh()->GetSocketLocation(GetWeaponAttachPoint())
+    return GetMainMesh()->DoesSocketExist(GetWeaponAttachPoint())
+        ? GetMainMesh()->GetSocketLocation(GetWeaponAttachPoint())
         : GetActorLocation();
 }
 
@@ -328,7 +317,7 @@ void AGSHeroCharacter::SetAimLocation(FVector NewAimLocation)
 
 //void AGSHeroCharacter::UpdateAimRotation()
 //{
-//    USkeletalMeshComponent* Mesh3P = GetThirdPersonMesh();
+//    USkeletalMeshComponent* Mesh3P = GetMainMesh();
 //    FName AttachPoint = GetWeaponAttachPoint();
 //
 //    if (Mesh3P->DoesSocketExist(AttachPoint))
@@ -702,7 +691,7 @@ void AGSHeroCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     // Cancel being revived if killed
     //InteractionCanceledDelegate.Broadcast();
-    Execute_InteractableCancelInteraction(this, GetThirdPersonMesh());
+    Execute_InteractableCancelInteraction(this, GetMainMesh());
 
     // Clear CurrentWeaponTag on the ASC. This happens naturally in UnEquipCurrentWeapon() but
     // that is only called on the server from hero death (the OnRep_CurrentWeapon() would have
@@ -722,9 +711,7 @@ void AGSHeroCharacter::PostInitializeComponents()
 {
     Super::PostInitializeComponents();
 
-    StartingThirdPersonCameraBoomArmLength = ThirdPersonCameraBoom->TargetArmLength;
-    StartingThirdPersonCameraBoomLocation = ThirdPersonCameraBoom->GetRelativeLocation();
-    StartingThirdPersonMeshLocation = GetMesh()->GetRelativeLocation();
+    StartingThirdPersonMeshLocation = GetMainMesh()->GetRelativeLocation();
 
     AimingRotation = GetActorRotation();
     AimingLocation = GetActorLocation() + AimingRotation.Vector()*100.f;
@@ -964,22 +951,26 @@ void AGSHeroCharacter::SetupStartupPerspective()
 
     if (PC && PC->IsLocalController())
     {
-        // If knocked down, always be in 3rd person
         if (IsValid(AbilitySystemComponent))
         {
             return;
         }
 
-        // Only change perspective for the locally controlled player.
-        // Simulated proxies should stay in third person.
+        // No valid camera, abort
+        if (! IsValid(GetCamera()))
+        {
+            return;
+        }
 
-        ThirdPersonCamera->Activate();
+        // Assign view target
+
+        GetCamera()->Activate();
         PC->SetViewTarget(this);
 
-        GetMesh()->SetVisibility(true, true);
+        GetMainMesh()->SetVisibility(true, true);
 
         // Reset the third person mesh
-        GetMesh()->SetRelativeLocation(StartingThirdPersonMeshLocation);
+        GetMainMesh()->SetRelativeLocation(StartingThirdPersonMeshLocation);
     }
 }
 
@@ -1053,9 +1044,9 @@ void AGSHeroCharacter::SetCurrentWeapon(AGSWeapon* NewWeapon, AGSWeapon* LastWea
         }
 
         UAnimMontage* Equip3PMontage = CurrentWeapon->GetEquip3PMontage();
-        if (Equip3PMontage && GetThirdPersonMesh())
+        if (Equip3PMontage && GetMainMesh())
         {
-            GetThirdPersonMesh()->GetAnimInstance()->Montage_Play(Equip3PMontage);
+            GetMainMesh()->GetAnimInstance()->Montage_Play(Equip3PMontage);
         }
     }
     else

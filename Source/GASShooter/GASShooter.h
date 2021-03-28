@@ -12,6 +12,7 @@
 #define COLLISION_ABILITYOVERLAPPROJECTILE		ECollisionChannel::ECC_GameTraceChannel5
 #define COLLISION_PICKUP						ECollisionChannel::ECC_GameTraceChannel6
 #define COLLISION_INTERACTABLE					ECollisionChannel::ECC_GameTraceChannel7
+#define COLLISION_TRACE_WEAPON                  ECollisionChannel::ECC_GameTraceChannel8
 
 UENUM(BlueprintType)
 enum class EGSAbilityInputID : uint8

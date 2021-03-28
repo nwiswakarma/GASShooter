@@ -8,8 +8,9 @@
 #include "Characters/Abilities/GSGATA_LineTrace.h"
 #include "Characters/Abilities/GSGATA_SphereTrace.h"
 #include "Characters/Heroes/GSHeroCharacter.h"
-#include "GSBlueprintFunctionLibrary.h"
+#include "Weapons/GSUTProjectile.h"
 #include "Player/GSPlayerController.h"
+#include "GSBlueprintFunctionLibrary.h"
 
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -145,7 +146,7 @@ void AGSWeapon::Equip()
 
     if (WeaponMesh3P)
     {
-        WeaponMesh3P->AttachToComponent(OwningCharacter->GetThirdPersonMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, AttachPoint);
+        WeaponMesh3P->AttachToComponent(OwningCharacter->GetMainMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, AttachPoint);
         WeaponMesh3P->SetRelativeLocation(WeaponMesh3PEquippedRelativeLocation);
         WeaponMesh3P->SetRelativeRotation(FRotator(0, 0, -90.0f));
         WeaponMesh3P->CastShadow = true;
@@ -400,6 +401,260 @@ void AGSWeapon::PickUpOnTouch(AGSHeroCharacter* InCharacter)
     InCharacter->AddWeaponToInventory(this, true);
 }
 
+FGSProjectileSpawnInfo AGSWeapon::FireProjectile(
+    TSubclassOf<AGSUTProjectile> ProjectileType,
+    FVector ProjectileLocation,
+    FRotator ProjectileRotation,
+    bool bDeferForwardTick
+    )
+{
+    //UE_LOG(LogTemp, Verbose, TEXT("%s::FireProjectile()"), *GetName());
+
+    if (! IsValid(OwningCharacter))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("%s::FireProjectile(): Weapon is not owned (owner died during firing sequence)"), *GetName());
+        return {};
+    }
+
+    //if (Role == ROLE_Authority)
+    //{
+    //    UTOwner->IncrementFlashCount(CurrentFireMode);
+    //    AUTPlayerState* PS = UTOwner->Controller ? Cast<AUTPlayerState>(UTOwner->Controller->PlayerState) : NULL;
+    //    if (PS && (ShotsStatsName != NAME_None))
+    //    {
+    //        PS->ModifyStatsValue(ShotsStatsName, 1);
+    //    }
+    //}
+
+    // spawn the projectile at the muzzle
+    //const FVector SpawnLocation = GetFireStartLoc();
+    //const FRotator SpawnRotation = GetAdjustedAim(SpawnLocation);
+    return SpawnNetPredictedProjectile(
+        ProjectileType,
+        ProjectileLocation,
+        ProjectileRotation,
+        bDeferForwardTick
+        );
+}
+
+FGSProjectileSpawnInfo AGSWeapon::SpawnNetPredictedProjectile(
+    TSubclassOf<AGSUTProjectile> ProjectileClass,
+    FVector SpawnLocation,
+    FRotator SpawnRotation,
+    bool bDeferForwardTick
+    )
+{
+    //DrawDebugSphere(GetWorld(), SpawnLocation, 10, 10, FColor::Green, true);
+
+    AGSPlayerController* OwningPlayer = OwningCharacter
+        ? Cast<AGSPlayerController>(OwningCharacter->GetController())
+        : NULL;
+
+    float CatchupTickDelta = 
+        ((GetNetMode() != NM_Standalone) && OwningPlayer)
+        ? OwningPlayer->GetPredictionTime()
+        : 0.f;
+
+    //if (OwningPlayer)
+    //{
+    //    float CurrentMoveTime = (UTOwner && UTOwner->UTCharacterMovement) ? UTOwner->UTCharacterMovement->GetCurrentSynchTime() : GetWorld()->GetTimeSeconds();
+    //    if (UTOwner->Role < ROLE_Authority)
+    //    {
+    //        UE_LOG(UT, Warning, TEXT("CLIENT SpawnNetPredictedProjectile at %f yaw %f "), CurrentMoveTime, SpawnRotation.Yaw);
+    //    }
+    //    else
+    //    {
+    //        UE_LOG(UT, Warning, TEXT("SERVER SpawnNetPredictedProjectile at %f yaw %f TIME %f"), CurrentMoveTime, SpawnRotation.Yaw, GetWorld()->GetTimeSeconds());
+    //    }
+    //}
+
+    if ((CatchupTickDelta > 0.f) && (GetLocalRole() != ROLE_Authority))
+    {
+        float SleepTime = OwningPlayer->GetProjectileSleepTime();
+
+        if (SleepTime > 0.f)
+        {
+            // lag is so high need to delay spawn
+            if (!GetWorldTimerManager().IsTimerActive(SpawnDelayedFakeProjHandle))
+            {
+                DelayedProjectile.ProjectileClass = ProjectileClass;
+                DelayedProjectile.SpawnLocation = SpawnLocation;
+                DelayedProjectile.SpawnRotation = SpawnRotation;
+                GetWorldTimerManager().SetTimer(
+                    SpawnDelayedFakeProjHandle,
+                    this,
+                    &AGSWeapon::SpawnDelayedFakeProjectile,
+                    SleepTime,
+                    false
+                    );
+            }
+
+            return {};
+        }
+    }
+
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.Instigator = OwningCharacter;
+    SpawnParams.Owner = OwningCharacter;
+    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+    AGSUTProjectile* NewProjectile = ((GetLocalRole() == ROLE_Authority) || (CatchupTickDelta > 0.f))
+        ? GetWorld()->SpawnActor<AGSUTProjectile>(
+            ProjectileClass,
+            SpawnLocation,
+            SpawnRotation,
+            SpawnParams
+            )
+        : NULL;
+
+    if (NewProjectile)
+    {
+        //if (NewProjectile->OffsetVisualComponent)
+        //{
+        //    switch (GetWeaponHand())
+        //    {
+        //        case EWeaponHand::HAND_Center:
+        //            NewProjectile->InitialVisualOffset = NewProjectile->InitialVisualOffset + LowMeshOffset;
+        //            NewProjectile->OffsetVisualComponent->RelativeLocation = NewProjectile->InitialVisualOffset;
+        //            break;
+        //        case EWeaponHand::HAND_Hidden:
+        //        {
+        //            NewProjectile->InitialVisualOffset = NewProjectile->InitialVisualOffset + VeryLowMeshOffset;
+        //            NewProjectile->OffsetVisualComponent->RelativeLocation = NewProjectile->InitialVisualOffset;
+        //            break;
+        //        }
+        //    }
+        //}
+
+        if (OwningCharacter)
+        {
+            //OwningCharacter->LastFiredProjectile = NewProjectile;
+            NewProjectile->ShooterLocation = OwningCharacter->GetActorLocation();
+            NewProjectile->ShooterRotation = OwningCharacter->GetActorRotation();
+        }
+
+        if (GetLocalRole() == ROLE_Authority)
+        {
+            //NewProjectile->HitsStatsName = HitsStatsName;
+
+            if (! bDeferForwardTick)
+            {
+                ForwardTickProjectile(NewProjectile, CatchupTickDelta);
+            }
+        }
+        else
+        {
+            NewProjectile->InitFakeProjectile(OwningPlayer);
+            NewProjectile->SetLifeSpan(FMath::Min(NewProjectile->GetLifeSpan(), 2.f * FMath::Max(0.f, CatchupTickDelta)));
+        }
+    }
+
+    return FGSProjectileSpawnInfo(
+        NewProjectile,
+        CatchupTickDelta,
+        GetLocalRole() != ROLE_Authority
+        );
+}
+
+void AGSWeapon::SpawnDelayedFakeProjectile()
+{
+    AGSPlayerController* OwningPlayer = OwningCharacter
+        ? Cast<AGSPlayerController>(OwningCharacter->GetController())
+        : NULL;
+
+    if (OwningPlayer)
+    {
+        FActorSpawnParameters SpawnParams;
+        SpawnParams.Instigator = OwningCharacter;
+        SpawnParams.Owner = OwningCharacter;
+        SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+        AGSUTProjectile* NewProjectile = GetWorld()->SpawnActor<AGSUTProjectile>(
+            DelayedProjectile.ProjectileClass,
+            DelayedProjectile.SpawnLocation,
+            DelayedProjectile.SpawnRotation,
+            SpawnParams
+            );
+
+        if (NewProjectile)
+        {
+            float MaxPredictionPing = OwningPlayer->GetMaxPredictionPing();
+            float PredictionFudgeFactor = OwningPlayer->GetPredictionFudgeFactor();
+
+            NewProjectile->InitFakeProjectile(OwningPlayer);
+            NewProjectile->SetLifeSpan(
+                FMath::Min(
+                    NewProjectile->GetLifeSpan(),
+                    0.002f * FMath::Max(0.f, MaxPredictionPing+PredictionFudgeFactor)
+                    )
+                );
+
+            //if (NewProjectile->OffsetVisualComponent)
+            //{
+            //    switch (GetWeaponHand())
+            //    {
+            //    case EWeaponHand::HAND_Center:
+            //        NewProjectile->InitialVisualOffset = NewProjectile->InitialVisualOffset + LowMeshOffset;
+            //        NewProjectile->OffsetVisualComponent->RelativeLocation = NewProjectile->InitialVisualOffset;
+            //        break;
+            //    case EWeaponHand::HAND_Hidden:
+            //    {
+            //        NewProjectile->InitialVisualOffset = NewProjectile->InitialVisualOffset + VeryLowMeshOffset;
+            //        NewProjectile->OffsetVisualComponent->RelativeLocation = NewProjectile->InitialVisualOffset;
+            //        break;
+            //    }
+            //    }
+            //}
+        }
+    }
+}
+
+AGSUTProjectile* AGSWeapon::ForwardTickProjectile(
+    AGSUTProjectile* InProjectile,
+    float InCatchupTickDelta
+    )
+{
+    if (! InProjectile)
+    {
+        return nullptr;
+    }
+
+    if ((InCatchupTickDelta > 0.f) && InProjectile->ProjectileMovement)
+    {
+        // server ticks projectile to match with
+        // when client actually fired
+        //
+        // TODO: account for CustomTimeDilation?
+        if (InProjectile->PrimaryActorTick.IsTickFunctionEnabled())
+        {
+            InProjectile->TickActor(
+                InCatchupTickDelta * InProjectile->CustomTimeDilation,
+                LEVELTICK_All,
+                InProjectile->PrimaryActorTick
+                );
+        }
+
+        InProjectile->ProjectileMovement->TickComponent(
+            InCatchupTickDelta * InProjectile->CustomTimeDilation,
+            LEVELTICK_All,
+            NULL
+            );
+
+        InProjectile->SetForwardTicked(true);
+
+        if (InProjectile->GetLifeSpan() > 0.f)
+        {
+            InProjectile->SetLifeSpan(0.1f + FMath::Max(0.01f, InProjectile->GetLifeSpan() - InCatchupTickDelta));
+        }
+    }
+    else
+    {
+        InProjectile->SetForwardTicked(false);
+    }
+
+    return InProjectile;
+}
+
 void AGSWeapon::OnRep_PrimaryClipAmmo(int32 OldPrimaryClipAmmo)
 {
     OnPrimaryClipAmmoChanged.Broadcast(OldPrimaryClipAmmo, PrimaryClipAmmo);
@@ -418,4 +673,20 @@ void AGSWeapon::OnRep_SecondaryClipAmmo(int32 OldSecondaryClipAmmo)
 void AGSWeapon::OnRep_MaxSecondaryClipAmmo(int32 OldMaxSecondaryClipAmmo)
 {
     OnMaxSecondaryClipAmmoChanged.Broadcast(OldMaxSecondaryClipAmmo, MaxSecondaryClipAmmo);
+}
+
+void AGSWeapon::MulticastExecuteGameplayCueLocal_Implementation(
+    const FGameplayTag GameplayCueTag,
+    const FGameplayCueParameters& GameplayCueParameters,
+    bool bSimulatedOnly
+    )
+{
+    if (IsValid(AbilitySystemComponent) &&
+        (bSimulatedOnly && (GetLocalRole() == ROLE_SimulatedProxy)))
+    {
+        AbilitySystemComponent->ExecuteGameplayCueLocal(
+            GameplayCueTag,
+            GameplayCueParameters
+            );
+    }
 }
