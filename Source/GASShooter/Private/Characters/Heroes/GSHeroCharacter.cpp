@@ -1,31 +1,38 @@
 // Copyright 2020 Dan Kestranek.
 
-
 #include "Characters/Heroes/GSHeroCharacter.h"
 #include "Animation/AnimInstance.h"
-#include "AI/GSHeroAIController.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
 #include "Camera/CameraComponent.h"
+#include "Components/WidgetComponent.h"
+#include "GameFramework/SpringArmComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetMathLibrary.h"
+#include "Net/UnrealNetwork.h"
+#include "Sound/SoundCue.h"
+#include "TimerManager.h"
+
+#include "GASShooterGameModeBase.h"
+#include "GSBlueprintFunctionLibrary.h"
+#include "AI/GSHeroAIController.h"
 #include "Characters/Abilities/GSAbilitySystemComponent.h"
 #include "Characters/Abilities/GSAbilitySystemGlobals.h"
 #include "Characters/Abilities/AttributeSets/GSAmmoAttributeSet.h"
 #include "Characters/Abilities/AttributeSets/GSAttributeSetBase.h"
-#include "Components/WidgetComponent.h"
-#include "GameFramework/SpringArmComponent.h"
-#include "GASShooterGameModeBase.h"
-#include "GSBlueprintFunctionLibrary.h"
-#include "Kismet/GameplayStatics.h"
-#include "Kismet/KismetMathLibrary.h"
-#include "Net/UnrealNetwork.h"
 #include "Player/GSPlayerController.h"
 #include "Player/GSPlayerState.h"
-#include "Sound/SoundCue.h"
-#include "TimerManager.h"
 #include "UI/GSFloatingStatusBarWidget.h"
+
+#include "Character/ALSCharacterMovementComponent.h"
+#include "Character/Animation/ALSCharacterAnimInstance.h"
+
 #include "Weapons/GSWeapon.h"
 
 AGSHeroCharacter::AGSHeroCharacter(const class FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
+	PrimaryActorTick.bCanEverTick = true;
+	bUseControllerRotationYaw = false;
+
     BaseTurnRate = 45.0f;
     BaseLookUpRate = 45.0f;
 
@@ -82,7 +89,21 @@ void AGSHeroCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
     // This allows us to predict weapon changing.
     DOREPLIFETIME_CONDITION(AGSHeroCharacter, CurrentWeapon, COND_SimulatedOnly);
 
-    DOREPLIFETIME_CONDITION(AGSHeroCharacter, AimingRotation, COND_SkipOwner);
+    //DOREPLIFETIME_CONDITION(AGSHeroCharacter, AimingRotation, COND_SkipOwner);
+
+    // ALS
+
+    //DOREPLIFETIME(AGSHeroCharacter, TargetRagdollLocation);
+    DOREPLIFETIME_CONDITION(AGSHeroCharacter, ReplicatedCurrentAcceleration, COND_SkipOwner);
+    DOREPLIFETIME_CONDITION(AGSHeroCharacter, ReplicatedControlRotation, COND_SkipOwner);
+
+    DOREPLIFETIME(AGSHeroCharacter, DesiredGait);
+    DOREPLIFETIME_CONDITION(AGSHeroCharacter, DesiredStance, COND_SkipOwner);
+    DOREPLIFETIME_CONDITION(AGSHeroCharacter, DesiredRotationMode, COND_SkipOwner);
+
+    DOREPLIFETIME_CONDITION(AGSHeroCharacter, RotationMode, COND_SkipOwner);
+    DOREPLIFETIME_CONDITION(AGSHeroCharacter, OverlayState, COND_SkipOwner);
+    DOREPLIFETIME_CONDITION(AGSHeroCharacter, ViewMode, COND_SkipOwner);
 }
 
 // Called to bind functionality to input
@@ -249,11 +270,31 @@ void AGSHeroCharacter::FinishDying()
     Super::FinishDying();
 }
 
+void AGSHeroCharacter::StartSprinting()
+{
+	SetDesiredGait(EALSGait::Sprinting);
+}
+
+void AGSHeroCharacter::StopSprinting()
+{
+	SetDesiredGait(EALSGait::Running);
+}
+
 FVector AGSHeroCharacter::GetWeaponAttachPointLocation() const
 {
     return GetMainMesh()->DoesSocketExist(GetWeaponAttachPoint())
         ? GetMainMesh()->GetSocketLocation(GetWeaponAttachPoint())
         : GetActorLocation();
+}
+
+bool AGSHeroCharacter::IsUsingFixedMovementRotation() const
+{
+    return bUseFixedMovementRotation;
+}
+
+bool AGSHeroCharacter::IsUsingAimInput() const
+{
+    return bUseAimInput;
 }
 
 AGSWeapon* AGSHeroCharacter::GetCurrentWeapon() const
@@ -445,6 +486,12 @@ void AGSHeroCharacter::PreviousWeapon()
     }
 }
 
+void AGSHeroCharacter::UnEquipWeapon()
+{
+    UnEquipCurrentWeapon();
+    EquipWeapon(nullptr);
+}
+
 FName AGSHeroCharacter::GetWeaponAttachPoint() const
 {
     return WeaponAttachPoint;
@@ -608,6 +655,56 @@ void AGSHeroCharacter::BeginPlay()
     {
         ServerSyncCurrentWeapon();
     }
+
+    /** ALS BeginPlay() */
+
+    // If we're in networked game, disable curved movement
+    bEnableNetworkOptimizations = !IsNetMode(NM_Standalone);
+
+    // Make sure the mesh and animbp update after the CharacterBP to ensure it gets the most recent values.
+    GetMesh()->AddTickPrerequisiteActor(this);
+
+    // Set the Movement Model
+    SetMovementModel();
+
+    // ALS settings initialization
+
+    // Once, force set variables in anim bp. This ensures anim instance & character starts synchronized
+    FALSAnimCharacterInformation& AnimData = MainAnimInstance->GetCharacterInformationMutable();
+    MainAnimInstance->Gait = DesiredGait;
+    MainAnimInstance->Stance = DesiredStance;
+    MainAnimInstance->RotationMode = DesiredRotationMode;
+    AnimData.ViewMode = ViewMode;
+    MainAnimInstance->OverlayState = OverlayState;
+    AnimData.PrevMovementState = PrevMovementState;
+    MainAnimInstance->MovementState = MovementState;
+
+    // Update states to use the initial desired values.
+    SetGait(DesiredGait);
+    SetStance(DesiredStance);
+    SetRotationMode(DesiredRotationMode);
+    SetViewMode(ViewMode);
+    SetOverlayState(OverlayState);
+
+    if (Stance == EALSStance::Standing)
+    {
+        UnCrouch();
+    }
+    else
+    if (Stance == EALSStance::Crouching)
+    {
+        Crouch();
+    }
+
+    // Set default rotation values.
+    TargetRotation = GetActorRotation();
+    LastVelocityRotation = TargetRotation;
+    LastMovementInputRotation = TargetRotation;
+
+    if (GetLocalRole() == ROLE_SimulatedProxy)
+    {
+        MainAnimInstance->SetRootMotionMode(ERootMotionMode::IgnoreRootMotion);
+    }
 }
 
 void AGSHeroCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -635,9 +732,27 @@ void AGSHeroCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
     Super::EndPlay(EndPlayReason);
 }
 
+void AGSHeroCharacter::PreInitializeComponents()
+{
+    Super::PreInitializeComponents();
+
+    MainAnimInstance = Cast<UALSCharacterAnimInstance>(GetMesh()->GetAnimInstance());
+
+    if (! MainAnimInstance)
+    {
+        // Animation instance should be assigned if we're not in editor preview
+        checkf(
+            GetWorld()->WorldType == EWorldType::EditorPreview,
+            TEXT("%s doesn't have a valid animation instance assigned. That's not allowed"), *GetName()
+            );
+    }
+}
+
 void AGSHeroCharacter::PostInitializeComponents()
 {
     Super::PostInitializeComponents();
+
+    GSMovementComponent = Cast<UGSCharacterMovementComponent>(GetMovementComponent());
 
     StartingThirdPersonMeshLocation = GetMainMesh()->GetRelativeLocation();
 
@@ -647,11 +762,46 @@ void AGSHeroCharacter::PostInitializeComponents()
     GetWorldTimerManager().SetTimerForNextTick(this, &AGSHeroCharacter::SpawnDefaultInventory);
 }
 
+void AGSHeroCharacter::Tick(float DeltaTime)
+{
+    Super::Tick(DeltaTime);
+
+    // Set required values
+    SetEssentialValues(DeltaTime);
+
+    if (MovementState == EALSMovementState::Grounded)
+    {
+        UpdateCharacterMovement();
+        UpdateGroundedRotation(DeltaTime);
+    }
+    else
+    if (MovementState == EALSMovementState::InAir)
+    {
+        UpdateInAirRotation(DeltaTime);
+    }
+    //else
+    //if (MovementState == EALSMovementState::Ragdoll)
+    //{
+    //    RagdollUpdate(DeltaTime);
+    //}
+
+    // Update rest of character information
+    FALSAnimCharacterInformation& AnimData(MainAnimInstance->GetCharacterInformationMutable());
+    AnimData.Velocity = GetCharacterMovement()->Velocity;
+    AnimData.MovementInput = GetMovementInput();
+    AnimData.AimingRotation = GetAimingRotation();
+    AnimData.CharacterActorRotation = GetActorRotation();
+
+    // Cache values
+    PreviousVelocity = GetVelocity();
+    PreviousAimYaw = AimingRotation.Yaw;
+}
+
 void AGSHeroCharacter::LookUp(float Value)
 {
     if (IsAlive() && !bUseAimInput)
     {
-        AddControllerPitchInput(Value);
+        AddControllerPitchInput(Value * LookUpDownRate);
     }
 }
 
@@ -667,7 +817,7 @@ void AGSHeroCharacter::Turn(float Value)
 {
     if (IsAlive() && !bUseAimInput)
     {
-        AddControllerYawInput(Value);
+        AddControllerYawInput(Value * LookLeftRightRate);
     }
 }
 
@@ -1154,4 +1304,809 @@ void AGSHeroCharacter::ClientSyncCurrentWeapon_Implementation(AGSWeapon* InWeapo
 bool AGSHeroCharacter::ClientSyncCurrentWeapon_Validate(AGSWeapon* InWeapon)
 {
     return true;
+}
+
+/** ALS */
+
+// Public
+
+/** ALS - Character States */
+
+void AGSHeroCharacter::SetAcceleration(const FVector& NewAcceleration)
+{
+    Acceleration = (NewAcceleration != FVector::ZeroVector || IsLocallyControlled())
+                       ? NewAcceleration
+                       : Acceleration / 2;
+    MainAnimInstance->GetCharacterInformationMutable().Acceleration = Acceleration;
+}
+
+void AGSHeroCharacter::SetIsMoving(bool bNewIsMoving)
+{
+    bIsMoving = bNewIsMoving;
+    MainAnimInstance->GetCharacterInformationMutable().bIsMoving = bIsMoving;
+}
+
+void AGSHeroCharacter::SetMovementInputAmount(float NewMovementInputAmount)
+{
+    MovementInputAmount = NewMovementInputAmount;
+    MainAnimInstance->GetCharacterInformationMutable().MovementInputAmount = MovementInputAmount;
+}
+
+void AGSHeroCharacter::SetSpeed(float NewSpeed)
+{
+    Speed = NewSpeed;
+    MainAnimInstance->GetCharacterInformationMutable().Speed = Speed;
+}
+
+void AGSHeroCharacter::SetAimYawRate(float NewAimYawRate)
+{
+    AimYawRate = NewAimYawRate;
+    MainAnimInstance->GetCharacterInformationMutable().AimYawRate = AimYawRate;
+}
+
+void AGSHeroCharacter::GetControlForwardRightVector(FVector& Forward, FVector& Right) const
+{
+    const FRotator ControlRot(0.0f, AimingRotation.Yaw, 0.0f);
+    Forward = GetInputAxisValue("MoveForward/Backwards") * UKismetMathLibrary::GetForwardVector(ControlRot);
+    Right = GetInputAxisValue("MoveRight/Left") * UKismetMathLibrary::GetRightVector(ControlRot);
+}
+
+/** ALS - Movement System */
+
+void AGSHeroCharacter::SetHasMovementInput(bool bNewHasMovementInput)
+{
+    bHasMovementInput = bNewHasMovementInput;
+    MainAnimInstance->GetCharacterInformationMutable().bHasMovementInput = bHasMovementInput;
+}
+
+FALSMovementSettings AGSHeroCharacter::GetTargetMovementSettings() const
+{
+    if (RotationMode == EALSRotationMode::VelocityDirection)
+    {
+        if (Stance == EALSStance::Standing)
+        {
+            return MovementData.VelocityDirection.Standing;
+        }
+        if (Stance == EALSStance::Crouching)
+        {
+            return MovementData.VelocityDirection.Crouching;
+        }
+    }
+    else if (RotationMode == EALSRotationMode::LookingDirection)
+    {
+        if (Stance == EALSStance::Standing)
+        {
+            return MovementData.LookingDirection.Standing;
+        }
+        if (Stance == EALSStance::Crouching)
+        {
+            return MovementData.LookingDirection.Crouching;
+        }
+    }
+    else if (RotationMode == EALSRotationMode::Aiming)
+    {
+        if (Stance == EALSStance::Standing)
+        {
+            return MovementData.Aiming.Standing;
+        }
+        if (Stance == EALSStance::Crouching)
+        {
+            return MovementData.Aiming.Crouching;
+        }
+    }
+
+    // Default to velocity dir standing
+    return MovementData.VelocityDirection.Standing;
+}
+
+EALSGait AGSHeroCharacter::GetAllowedGait() const
+{
+    // CURRENTLY BYPASSED
+    //
+    // Checks are done with gameplay ability system
+
+    // Calculate the Allowed Gait.
+    //
+    // This represents the maximum Gait the character is currently allowed
+    // to be in, and can be determined by the desired gait, the rotation mode,
+    // the stance, etc.
+    //
+    // For example, if you wanted to force the character into a walking state
+    // while indoors, this could be done here.
+
+    //if (Stance == EALSStance::Standing)
+    //{
+    //    if (RotationMode != EALSRotationMode::Aiming)
+    //    {
+    //        if (DesiredGait == EALSGait::Sprinting)
+    //        {
+    //            return CanSprint() ? EALSGait::Sprinting : EALSGait::Running;
+    //        }
+    //        return DesiredGait;
+    //    }
+    //}
+
+    // Crouching stance & Aiming rot mode has same behaviour
+
+    //if (DesiredGait == EALSGait::Sprinting)
+    //{
+    //    return EALSGait::Running;
+    //}
+
+    return DesiredGait;
+}
+
+EALSGait AGSHeroCharacter::GetActualGait(EALSGait AllowedGait) const
+{
+    // Get actual gait for the specified gait with regards to character speed.
+    //
+    // This is calculated by the actual movement of the character,
+    // and so it can be different from the desired gait or allowed gait.
+    //
+    // For instance, if the Allowed Gait becomes walking,
+    // the Actual gait will still be running until the character
+    // decelerates to the walking speed.
+
+    const float WalkSpeed = GSMovementComponent->CurrentMovementSettings.WalkSpeed;
+    const float RunSpeed = GSMovementComponent->CurrentMovementSettings.RunSpeed;
+
+    // Character speed faster than run speed
+    if (Speed > RunSpeed + 10.0f)
+    {
+        // Sprint gait requested, return sprint gait
+        if (AllowedGait == EALSGait::Sprinting)
+        {
+            return EALSGait::Sprinting;
+        }
+
+        // Otherwise, return run gait
+        return EALSGait::Running;
+    }
+
+    // Character speed faster than walk speed, return run gait
+    if (Speed > WalkSpeed + 10.0f)
+    {
+        return EALSGait::Running;
+    }
+
+    // Otherwise, return walk gait
+    return EALSGait::Walking;
+}
+
+bool AGSHeroCharacter::CanSprint() const
+{
+    // Determine if the character is currently able to sprint
+    // based on the Rotation mode and current acceleration (input) rotation.
+    //
+    // If the character is in the Looking Rotation mode,
+    // only allow sprinting if there is full movement input
+    // and it is faced forward relative to the camera + or - 50 degrees.
+
+    if (!bHasMovementInput || RotationMode == EALSRotationMode::Aiming)
+    {
+        return false;
+    }
+
+    const bool bValidInputAmount = MovementInputAmount > 0.9f;
+
+    if (RotationMode == EALSRotationMode::VelocityDirection)
+    {
+        return bValidInputAmount;
+    }
+
+    if (RotationMode == EALSRotationMode::LookingDirection)
+    {
+        const FRotator AccRot = ReplicatedCurrentAcceleration.ToOrientationRotator();
+        FRotator Delta = AccRot - AimingRotation;
+        Delta.Normalize();
+
+        return bValidInputAmount && FMath::Abs(Delta.Yaw) < 50.0f;
+    }
+
+    return false;
+}
+
+// Protected
+
+/** ALS - Character States */
+
+void AGSHeroCharacter::SetMovementState(const EALSMovementState NewState)
+{
+    if (MovementState != NewState)
+    {
+        PrevMovementState = MovementState;
+        MovementState = NewState;
+        FALSAnimCharacterInformation& AnimData = MainAnimInstance->GetCharacterInformationMutable();
+        AnimData.PrevMovementState = PrevMovementState;
+        MainAnimInstance->MovementState = MovementState;
+        OnMovementStateChanged(PrevMovementState);
+    }
+}
+
+void AGSHeroCharacter::SetMovementAction(const EALSMovementAction NewAction)
+{
+    if (MovementAction != NewAction)
+    {
+        const EALSMovementAction Prev = MovementAction;
+        MovementAction = NewAction;
+        MainAnimInstance->MovementAction = MovementAction;
+        OnMovementActionChanged(Prev);
+    }
+}
+
+void AGSHeroCharacter::SetStance(const EALSStance NewStance)
+{
+    if (Stance != NewStance)
+    {
+        const EALSStance Prev = Stance;
+        Stance = NewStance;
+        OnStanceChanged(Prev);
+    }
+}
+
+void AGSHeroCharacter::SetGait(const EALSGait NewGait)
+{
+    if (Gait != NewGait)
+    {
+        const EALSGait Prev = Gait;
+        Gait = NewGait;
+        OnGaitChanged(Prev);
+    }
+}
+
+
+void AGSHeroCharacter::SetDesiredStance(EALSStance NewStance)
+{
+    DesiredStance = NewStance;
+    if (GetLocalRole() == ROLE_AutonomousProxy)
+    {
+        Server_SetDesiredStance(NewStance);
+    }
+}
+
+void AGSHeroCharacter::Server_SetDesiredStance_Implementation(EALSStance NewStance)
+{
+    SetDesiredStance(NewStance);
+}
+
+void AGSHeroCharacter::SetDesiredGait(const EALSGait NewGait)
+{
+    DesiredGait = NewGait;
+    if (GetLocalRole() == ROLE_AutonomousProxy)
+    {
+        Server_SetDesiredGait(NewGait);
+    }
+}
+
+void AGSHeroCharacter::Server_SetDesiredGait_Implementation(EALSGait NewGait)
+{
+    SetDesiredGait(NewGait);
+}
+
+void AGSHeroCharacter::SetDesiredRotationMode(EALSRotationMode NewRotMode)
+{
+    DesiredRotationMode = NewRotMode;
+    if (GetLocalRole() == ROLE_AutonomousProxy)
+    {
+        Server_SetDesiredRotationMode(NewRotMode);
+    }
+}
+
+void AGSHeroCharacter::Server_SetDesiredRotationMode_Implementation(EALSRotationMode NewRotMode)
+{
+    SetDesiredRotationMode(NewRotMode);
+}
+
+void AGSHeroCharacter::SetRotationMode(const EALSRotationMode NewRotationMode)
+{
+    if (RotationMode != NewRotationMode)
+    {
+        const EALSRotationMode Prev = RotationMode;
+        RotationMode = NewRotationMode;
+        OnRotationModeChanged(Prev);
+
+        if (GetLocalRole() == ROLE_AutonomousProxy)
+        {
+            Server_SetRotationMode(NewRotationMode);
+        }
+    }
+}
+
+void AGSHeroCharacter::Server_SetRotationMode_Implementation(EALSRotationMode NewRotationMode)
+{
+    SetRotationMode(NewRotationMode);
+}
+
+void AGSHeroCharacter::SetViewMode(const EALSViewMode NewViewMode)
+{
+    if (ViewMode != NewViewMode)
+    {
+        const EALSViewMode Prev = ViewMode;
+        ViewMode = NewViewMode;
+        OnViewModeChanged(Prev);
+
+        if (GetLocalRole() == ROLE_AutonomousProxy)
+        {
+            Server_SetViewMode(NewViewMode);
+        }
+    }
+}
+
+void AGSHeroCharacter::Server_SetViewMode_Implementation(EALSViewMode NewViewMode)
+{
+    SetViewMode(NewViewMode);
+}
+
+void AGSHeroCharacter::SetOverlayState(const EALSOverlayState NewState)
+{
+    if (OverlayState != NewState)
+    {
+        const EALSOverlayState Prev = OverlayState;
+        OverlayState = NewState;
+        OnOverlayStateChanged(Prev);
+
+        if (GetLocalRole() == ROLE_AutonomousProxy)
+        {
+            Server_SetOverlayState(NewState);
+        }
+    }
+}
+
+
+void AGSHeroCharacter::Server_SetOverlayState_Implementation(EALSOverlayState NewState)
+{
+    SetOverlayState(NewState);
+}
+
+/** ALS - State Changes */
+
+void AGSHeroCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode)
+{
+    Super::OnMovementModeChanged(PrevMovementMode, PreviousCustomMode);
+
+    // Use the Character Movement Mode changes to set the Movement States
+    // to the right values.
+    //
+    // This allows you to have a custom set of movement states but
+    // still use the functionality of the default character movement component.
+
+    if (GetCharacterMovement()->MovementMode == MOVE_Walking ||
+        GetCharacterMovement()->MovementMode == MOVE_NavWalking)
+    {
+        SetMovementState(EALSMovementState::Grounded);
+    }
+    else if (GetCharacterMovement()->MovementMode == MOVE_Falling)
+    {
+        SetMovementState(EALSMovementState::InAir);
+    }
+}
+
+void AGSHeroCharacter::OnMovementStateChanged(const EALSMovementState PreviousState)
+{
+    if (MovementState == EALSMovementState::InAir)
+    {
+        if (MovementAction == EALSMovementAction::None)
+        {
+            // If the character enters the air,
+            // set the In Air Rotation and uncrouch if crouched.
+            InAirRotation = GetActorRotation();
+            if (Stance == EALSStance::Crouching)
+            {
+                UnCrouch();
+            }
+        }
+        //else
+        //if (MovementAction == EALSMovementAction::Rolling)
+        //{
+        //    // If the character is currently rolling, enable the ragdoll.
+        //    ReplicatedRagdollStart();
+        //}
+    }
+
+    //if (CameraBehavior)
+    //{
+    //    CameraBehavior->MovementState = MovementState;
+    //}
+}
+
+void AGSHeroCharacter::OnMovementActionChanged(const EALSMovementAction PreviousAction)
+{
+    // Make the character crouch if performing a roll.
+    if (MovementAction == EALSMovementAction::Rolling)
+    {
+        Crouch();
+    }
+
+    if (PreviousAction == EALSMovementAction::Rolling)
+    {
+        if (DesiredStance == EALSStance::Standing)
+        {
+            UnCrouch();
+        }
+        else if (DesiredStance == EALSStance::Crouching)
+        {
+            Crouch();
+        }
+    }
+
+    //if (CameraBehavior)
+    //{
+    //    CameraBehavior->MovementAction = MovementAction;
+    //}
+}
+
+void AGSHeroCharacter::OnStanceChanged(const EALSStance PreviousStance)
+{
+    MainAnimInstance->Stance = Stance;
+
+    //if (CameraBehavior)
+    //{
+    //    CameraBehavior->Stance = Stance;
+    //}
+}
+
+void AGSHeroCharacter::OnRotationModeChanged(EALSRotationMode PreviousRotationMode)
+{
+    MainAnimInstance->RotationMode = RotationMode;
+
+    if (RotationMode == EALSRotationMode::VelocityDirection && ViewMode == EALSViewMode::FirstPerson)
+    {
+        // If the new rotation mode is Velocity Direction and the character is in First Person,
+        // set the viewmode to Third Person.
+        SetViewMode(EALSViewMode::ThirdPerson);
+    }
+
+    //if (CameraBehavior)
+    //{
+    //    CameraBehavior->SetRotationMode(RotationMode);
+    //}
+}
+
+void AGSHeroCharacter::OnGaitChanged(const EALSGait PreviousGait)
+{
+    MainAnimInstance->Gait = Gait;
+
+    //if (CameraBehavior)
+    //{
+    //    CameraBehavior->Gait = Gait;
+    //}
+}
+
+void AGSHeroCharacter::OnViewModeChanged(const EALSViewMode PreviousViewMode)
+{
+    MainAnimInstance->GetCharacterInformationMutable().ViewMode = ViewMode;
+    if (ViewMode == EALSViewMode::ThirdPerson)
+    {
+        if (RotationMode == EALSRotationMode::VelocityDirection || RotationMode == EALSRotationMode::LookingDirection)
+        {
+            // If Third Person, set the rotation mode back to the desired mode.
+            SetRotationMode(DesiredRotationMode);
+        }
+    }
+    else if (ViewMode == EALSViewMode::FirstPerson && RotationMode == EALSRotationMode::VelocityDirection)
+    {
+        // If First Person, set the rotation mode to looking direction
+        // if currently in the velocity direction mode.
+        SetRotationMode(EALSRotationMode::LookingDirection);
+    }
+
+    //if (CameraBehavior)
+    //{
+    //    CameraBehavior->ViewMode = ViewMode;
+    //}
+}
+
+void AGSHeroCharacter::OnOverlayStateChanged(const EALSOverlayState PreviousState)
+{
+    MainAnimInstance->OverlayState = OverlayState;
+}
+
+void AGSHeroCharacter::SetEssentialValues(float DeltaTime)
+{
+    if (GetLocalRole() != ROLE_SimulatedProxy)
+    {
+        ReplicatedCurrentAcceleration = GetCharacterMovement()->GetCurrentAcceleration();
+        ReplicatedControlRotation = GetControlRotation();
+        EasedMaxAcceleration = GetCharacterMovement()->GetMaxAcceleration();
+    }
+    else
+    {
+        EasedMaxAcceleration = GetCharacterMovement()->GetMaxAcceleration() != 0
+                                   ? GetCharacterMovement()->GetMaxAcceleration()
+                                   : EasedMaxAcceleration / 2;
+    }
+
+    // Interp AimingRotation to current control rotation
+    // for smooth character rotation movement.
+    //
+    // Decrease InterpSpeed for slower but smoother movement.
+    AimingRotation = FMath::RInterpTo(AimingRotation, ReplicatedControlRotation, DeltaTime, 30);
+
+    // These values represent how the capsule is moving as well as
+    // how it wants to move, and therefore are essential for any
+    // data driven animation system.
+    //
+    // They are also used throughout the system for various functions,
+    // so I found it is easiest to manage them all in one place.
+
+    const FVector CurrentVel = GetVelocity();
+
+    // Set the amount of Acceleration.
+    SetAcceleration((CurrentVel - PreviousVelocity) / DeltaTime);
+
+    // Determine if the character is moving by getting it's speed.
+    // The Speed equals the length of the horizontal (x y) velocity,
+    // so it does not take vertical movement into account.
+    //
+    // If the character is moving, update the last velocity rotation.
+    //
+    // This value is saved because it might be useful to know
+    // the last orientation of movement even after the character has stopped.
+
+    SetSpeed(CurrentVel.Size2D());
+    SetIsMoving(Speed > 1.0f);
+
+    if (bIsMoving)
+    {
+        LastVelocityRotation = CurrentVel.ToOrientationRotator();
+    }
+
+    // Determine if the character has movement input
+    // by getting its movement input amount.
+    //
+    // The Movement Input Amount is equal to the current acceleration
+    // divided by the max acceleration so that it has a range of 0-1,
+    // 1 being the maximum possible amount of input, and 0 being none.
+    //
+    // If the character has movement input,
+    // update the Last Movement Input Rotation.
+
+    SetMovementInputAmount(ReplicatedCurrentAcceleration.Size() / EasedMaxAcceleration);
+    SetHasMovementInput(MovementInputAmount > 0.0f);
+
+    if (bHasMovementInput)
+    {
+        LastMovementInputRotation = ReplicatedCurrentAcceleration.ToOrientationRotator();
+    }
+
+    // Set the Aim Yaw rate by comparing the current and previous Aim Yaw value,
+    // divided by Delta Seconds.
+    //
+    // This represents the speed the camera is rotating left to right.
+    SetAimYawRate(FMath::Abs((AimingRotation.Yaw - PreviousAimYaw) / DeltaTime));
+}
+
+void AGSHeroCharacter::UpdateCharacterMovement()
+{
+    // Get the allowed Gait (desired gait with checks)
+    const EALSGait AllowedGait = GetAllowedGait();
+
+    // Determine the Actual Gait.
+    //
+    // If it is different from the current Gait, Set the new Gait Event.
+
+    const EALSGait ActualGait = GetActualGait(AllowedGait);
+
+    if (ActualGait != Gait)
+    {
+        SetGait(ActualGait);
+    }
+
+    // Get the Current Movement Settings and pass it
+    // through to the movement component.
+    GSMovementComponent->SetMovementSettings(GetTargetMovementSettings());
+
+    // Update the Character Max Walk Speed to the configured speeds
+    // based on the currently Allowed Gait.
+    //const float NewMaxSpeed = GSMovementComponent->CurrentMovementSettings.GetSpeedForGait(AllowedGait);
+
+    //GSMovementComponent->SetMaxWalkingSpeed(NewMaxSpeed);
+
+    switch (AllowedGait)
+    {
+        case EALSGait::Sprinting:
+            GSMovementComponent->StartSprinting();
+            break;
+
+        default:
+            GSMovementComponent->StopSprinting();
+            break;
+    }
+}
+
+void AGSHeroCharacter::UpdateGroundedRotation(float DeltaTime)
+{
+    if (MovementAction == EALSMovementAction::None)
+    {
+        const bool bCanUpdateMovingRot = ((bIsMoving && bHasMovementInput) || Speed > 150.0f) && !HasAnyRootMotion();
+
+        if (bCanUpdateMovingRot)
+        {
+            const float GroundedRotationRate = CalculateGroundedRotationRate();
+
+            if (RotationMode == EALSRotationMode::VelocityDirection)
+            {
+                // Velocity Direction Rotation
+                SmoothCharacterRotation(
+                    {0.0f, LastVelocityRotation.Yaw, 0.0f},
+                    800.0f,
+                    GroundedRotationRate,
+                    DeltaTime
+                    );
+            }
+            else
+            if (RotationMode == EALSRotationMode::LookingDirection)
+            {
+                // Looking Direction Rotation
+                float YawValue;
+                if (Gait == EALSGait::Sprinting)
+                {
+                    YawValue = LastVelocityRotation.Yaw;
+                }
+                else
+                {
+                    // Walking or Running..
+                    const float YawOffsetCurveVal = MainAnimInstance->GetCurveValue(FName(TEXT("YawOffset")));
+                    YawValue = AimingRotation.Yaw + YawOffsetCurveVal;
+                }
+                SmoothCharacterRotation({0.0f, YawValue, 0.0f}, 500.0f, GroundedRotationRate, DeltaTime);
+            }
+            else if (RotationMode == EALSRotationMode::Aiming)
+            {
+                const float ControlYaw = AimingRotation.Yaw;
+                SmoothCharacterRotation({0.0f, ControlYaw, 0.0f}, 1000.0f, 20.0f, DeltaTime);
+            }
+        }
+        else
+        {
+            // Not Moving
+
+            if ((ViewMode == EALSViewMode::ThirdPerson && RotationMode == EALSRotationMode::Aiming) || ViewMode == EALSViewMode::FirstPerson)
+            {
+                LimitRotation(-100.0f, 100.0f, 20.0f, DeltaTime);
+            }
+
+            // Apply the RotationAmount curve from Turn In Place Animations.
+            // The Rotation Amount curve defines how much rotation should be
+            // applied each frame, and is calculated for animations
+            // that are animated at 30fps.
+
+            const float RotAmountCurve = MainAnimInstance->GetCurveValue(FName(TEXT("RotationAmount")));
+
+            if (FMath::Abs(RotAmountCurve) > 0.001f)
+            {
+                if (GetLocalRole() == ROLE_AutonomousProxy)
+                {
+                    TargetRotation.Yaw = UKismetMathLibrary::NormalizeAxis(
+                        TargetRotation.Yaw + (RotAmountCurve * (DeltaTime / (1.0f / 30.0f))));
+                    SetActorRotation(TargetRotation);
+                }
+                else
+                {
+                    AddActorWorldRotation({0, RotAmountCurve * (DeltaTime / (1.0f / 30.0f)), 0});
+                }
+                TargetRotation = GetActorRotation();
+            }
+        }
+    }
+    else
+    if (MovementAction == EALSMovementAction::Rolling)
+    {
+        // Rolling Rotation (Not allowed on networked games)
+        if (!bEnableNetworkOptimizations && bHasMovementInput)
+        {
+            SmoothCharacterRotation({0.0f, LastMovementInputRotation.Yaw, 0.0f}, 0.0f, 2.0f, DeltaTime);
+        }
+    }
+
+    // Other actions are ignored...
+}
+
+void AGSHeroCharacter::UpdateInAirRotation(float DeltaTime)
+{
+    if (RotationMode == EALSRotationMode::VelocityDirection || RotationMode == EALSRotationMode::LookingDirection)
+    {
+        // Velocity / Looking Direction Rotation
+        SmoothCharacterRotation({0.0f, InAirRotation.Yaw, 0.0f}, 0.0f, 5.0f, DeltaTime);
+    }
+    else if (RotationMode == EALSRotationMode::Aiming)
+    {
+        // Aiming Rotation
+        SmoothCharacterRotation({0.0f, AimingRotation.Yaw, 0.0f}, 0.0f, 15.0f, DeltaTime);
+        InAirRotation = GetActorRotation();
+    }
+}
+
+/** ALS - Utils */
+
+void AGSHeroCharacter::SmoothCharacterRotation(FRotator Target, float TargetInterpSpeed, float ActorInterpSpeed, float DeltaTime)
+{
+    // Interpolate the Target Rotation for extra smooth rotation behavior
+    TargetRotation =
+        FMath::RInterpConstantTo(
+            TargetRotation,
+            Target,
+            DeltaTime,
+            TargetInterpSpeed
+            );
+
+    SetActorRotation(
+        FMath::RInterpTo(
+            GetActorRotation(),
+            TargetRotation,
+            DeltaTime,
+            ActorInterpSpeed
+            )
+        );
+}
+
+float AGSHeroCharacter::CalculateGroundedRotationRate() const
+{
+    // Calculate the rotation rate by using the current Rotation Rate Curve
+    // in the Movement Settings.
+    //
+    // Using the curve in conjunction with the mapped speed
+    // gives you a high level of control over the rotation
+    // rates for each speed.
+    //
+    // Increase the speed if the camera is rotating quickly for more
+    // responsive rotation.
+
+    const float MappedSpeedVal = GSMovementComponent->GetMappedSpeed();
+    const float CurveVal =
+        GSMovementComponent->CurrentMovementSettings.RotationRateCurve->GetFloatValue(MappedSpeedVal);
+
+    const float ClampedAimYawRate = FMath::GetMappedRangeValueClamped(
+        {0.0f, 300.0f},
+        {1.0f, 3.0f},
+        AimYawRate
+        );
+
+    return CurveVal * ClampedAimYawRate;
+}
+
+void AGSHeroCharacter::LimitRotation(float AimYawMin, float AimYawMax, float InterpSpeed, float DeltaTime)
+{
+    // Prevent the character from rotating past a certain angle.
+    FRotator Delta = AimingRotation - GetActorRotation();
+    Delta.Normalize();
+    const float RangeVal = Delta.Yaw;
+
+    if (RangeVal < AimYawMin || RangeVal > AimYawMax)
+    {
+        const float ControlRotYaw = AimingRotation.Yaw;
+        const float TargetYaw = ControlRotYaw + (RangeVal > 0.0f ? AimYawMin : AimYawMax);
+        SmoothCharacterRotation(
+            {0.0f, TargetYaw, 0.0f},
+            0.0f,
+            InterpSpeed,
+            DeltaTime
+            );
+    }
+}
+
+void AGSHeroCharacter::SetMovementModel()
+{
+    const FString ContextString = GetFullName();
+    FALSMovementStateSettings* OutRow =
+        MovementModel.DataTable->FindRow<FALSMovementStateSettings>(MovementModel.RowName, ContextString);
+    check(OutRow);
+    MovementData = *OutRow;
+}
+
+/** ALS - Replication */
+
+void AGSHeroCharacter::OnRep_RotationMode(EALSRotationMode PrevRotMode)
+{
+    OnRotationModeChanged(PrevRotMode);
+}
+
+void AGSHeroCharacter::OnRep_ViewMode(EALSViewMode PrevViewMode)
+{
+    OnViewModeChanged(PrevViewMode);
+}
+
+void AGSHeroCharacter::OnRep_OverlayState(EALSOverlayState PrevOverlayState)
+{
+    OnOverlayStateChanged(PrevOverlayState);
 }

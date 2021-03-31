@@ -54,7 +54,9 @@ void AGSPlayerController::Tick(float DeltaTime)
     //        *UGSBlueprintFunctionLibrary::GetPlayerEditorWindowRole(GetWorld()));
     //}
 
-    if (IsValid(HeroCharacter) && IsLocalPlayerController())
+    if (IsLocalPlayerController() &&
+        IsValid(HeroCharacter) &&
+        HeroCharacter->IsUsingAimInput())
     {
         UpdatePawnControlProjection(DeltaTime);
     }

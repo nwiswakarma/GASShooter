@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameplayTagContainer.h"
+#include "Library/ALSCharacterStructLibrary.h"
 #include "GSCharacterMovementComponent.generated.h"
 
 /**
@@ -73,7 +74,29 @@ public:
 	FGameplayTag InteractingTag;
 	FGameplayTag InteractingRemovalTag;
 
+    /** ALS */
+
+	// Movement Settings Variables
+	//UPROPERTY()
+	//bool bRequestMovementSettingsChange;
+
+	//UPROPERTY()
+	//float NewMaxWalkSpeed = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "ALS|Movement System")
+	FALSMovementSettings CurrentMovementSettings;
+	
+	// Set Movement Curve (Called in every instance)
+	float GetMappedSpeed() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Movement Settings")
+	void SetMovementSettings(FALSMovementSettings NewMovementSettings);
+
+public:
+
 	virtual float GetMaxSpeed() const override;
+	virtual float GetMaxAcceleration() const override;
+	virtual float GetMaxBrakingDeceleration() const override;
 	virtual void UpdateFromCompressedFlags(uint8 Flags) override;
 	virtual class FNetworkPredictionData_Client* GetPredictionData_Client() const override;
 
