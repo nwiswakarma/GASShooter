@@ -143,6 +143,21 @@ public:
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "GASShooter|GSWeapon")
     virtual USkeletalMeshComponent* GetWeaponMesh3P() const;
 
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "GASShooter|GSWeapon")
+    virtual UAnimMontage* GetWeaponFiringAnimation() const;
+
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "GASShooter|GSWeapon")
+    virtual UAnimMontage* GetWeaponReloadAnimation() const;
+
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "GASShooter|GSWeapon")
+    virtual UAnimMontage* GetCharacterFiringAnimation() const;
+
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "GASShooter|GSWeapon")
+    virtual UAnimMontage* GetCharacterReloadAnimation() const;
+
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "GASShooter|GSWeapon")
+    virtual FName GetMuzzleSocketName() const;
+
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
     virtual void PreReplication(IRepChangedPropertyTracker& ChangedPropertyTracker) override;
@@ -291,6 +306,26 @@ protected:
     // Relative Location of weapon 3P Mesh when equipped
     UPROPERTY(EditDefaultsOnly, Category = "GASShooter|GSWeapon")
     FVector WeaponMesh3PEquippedRelativeLocation;
+
+    // Weapon firing animation
+    UPROPERTY(EditDefaultsOnly, Category = "GASShooter|GSWeapon")
+    UAnimMontage* WeaponFiringAnimation;
+
+    // Weapon reload animation
+    UPROPERTY(EditDefaultsOnly, Category = "GASShooter|GSWeapon")
+    UAnimMontage* WeaponReloadAnimation;
+
+    // Character firing animation
+    UPROPERTY(EditDefaultsOnly, Category = "GASShooter|GSWeapon")
+    UAnimMontage* CharacterFiringAnimation;
+
+    // Character reload animation
+    UPROPERTY(EditDefaultsOnly, Category = "GASShooter|GSWeapon")
+    UAnimMontage* CharacterReloadAnimation;
+
+    // Mesh muzzle socket name
+    UPROPERTY(EditDefaultsOnly, Category = "GASShooter|GSWeapon")
+    FName MuzzleSocketName;
 
     UPROPERTY(BlueprintReadOnly, Replicated, Category = "GASShooter|GSWeapon")
     AGSHeroCharacter* OwningCharacter;

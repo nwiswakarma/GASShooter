@@ -78,6 +78,31 @@ USkeletalMeshComponent* AGSWeapon::GetWeaponMesh3P() const
     return WeaponMesh3P;
 }
 
+UAnimMontage* AGSWeapon::GetWeaponFiringAnimation() const
+{
+    return WeaponFiringAnimation;
+}
+
+UAnimMontage* AGSWeapon::GetWeaponReloadAnimation() const
+{
+    return WeaponReloadAnimation;
+}
+
+UAnimMontage* AGSWeapon::GetCharacterFiringAnimation() const
+{
+    return CharacterFiringAnimation;
+}
+
+UAnimMontage* AGSWeapon::GetCharacterReloadAnimation() const
+{
+    return CharacterReloadAnimation;
+}
+
+FName AGSWeapon::GetMuzzleSocketName() const
+{
+    return MuzzleSocketName;
+}
+
 void AGSWeapon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -148,7 +173,7 @@ void AGSWeapon::Equip()
     {
         WeaponMesh3P->AttachToComponent(OwningCharacter->GetMainMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, AttachPoint);
         WeaponMesh3P->SetRelativeLocation(WeaponMesh3PEquippedRelativeLocation);
-        WeaponMesh3P->SetRelativeRotation(FRotator(0, 0, -90.0f));
+        //WeaponMesh3P->SetRelativeRotation(FRotator(0, 0, -90.0f));
         WeaponMesh3P->CastShadow = true;
         WeaponMesh3P->bCastHiddenShadow = true;
 
