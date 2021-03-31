@@ -136,7 +136,6 @@ float UGSCharacterMovementComponent::GetMaxSpeed() const
     //}
 
     //return Owner->GetMoveSpeed();
-    //return CurrentMovementSettings.GetSpeedForGait(Owner->GetAllowedGait());
     return CurrentMovementSettings.GetSpeedForGait(EALSGait::Running);
 }
 

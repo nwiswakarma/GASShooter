@@ -785,7 +785,7 @@ void AGSHeroCharacter::Tick(float DeltaTime)
     //    RagdollUpdate(DeltaTime);
     //}
 
-    // Update rest of character information
+    // Update rest of animation data character information
     FALSAnimCharacterInformation& AnimData(MainAnimInstance->GetCharacterInformationMutable());
     AnimData.Velocity = GetCharacterMovement()->Velocity;
     AnimData.MovementInput = GetMovementInput();
@@ -1405,34 +1405,6 @@ EALSGait AGSHeroCharacter::GetAllowedGait() const
     //
     // Checks are done with gameplay ability system
 
-    // Calculate the Allowed Gait.
-    //
-    // This represents the maximum Gait the character is currently allowed
-    // to be in, and can be determined by the desired gait, the rotation mode,
-    // the stance, etc.
-    //
-    // For example, if you wanted to force the character into a walking state
-    // while indoors, this could be done here.
-
-    //if (Stance == EALSStance::Standing)
-    //{
-    //    if (RotationMode != EALSRotationMode::Aiming)
-    //    {
-    //        if (DesiredGait == EALSGait::Sprinting)
-    //        {
-    //            return CanSprint() ? EALSGait::Sprinting : EALSGait::Running;
-    //        }
-    //        return DesiredGait;
-    //    }
-    //}
-
-    // Crouching stance & Aiming rot mode has same behaviour
-
-    //if (DesiredGait == EALSGait::Sprinting)
-    //{
-    //    return EALSGait::Running;
-    //}
-
     return DesiredGait;
 }
 
@@ -1896,12 +1868,7 @@ void AGSHeroCharacter::UpdateCharacterMovement()
     // through to the movement component.
     GSMovementComponent->SetMovementSettings(GetTargetMovementSettings());
 
-    // Update the Character Max Walk Speed to the configured speeds
-    // based on the currently Allowed Gait.
-    //const float NewMaxSpeed = GSMovementComponent->CurrentMovementSettings.GetSpeedForGait(AllowedGait);
-
-    //GSMovementComponent->SetMaxWalkingSpeed(NewMaxSpeed);
-
+    // Update the movement state based on current gait
     switch (AllowedGait)
     {
         case EALSGait::Sprinting:
