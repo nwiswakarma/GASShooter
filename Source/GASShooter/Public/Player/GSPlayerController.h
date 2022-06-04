@@ -63,6 +63,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = "GASShooter|UI")
     FVector2D GetProjectedAimScreenLocation();
 
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "GASShooter|Network")
+	int32 GetPing() const;
+
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "GASShooter|Network")
+	int32 GetExactPing() const;
+
     // Simple way to RPC to the client the countdown until they respawn from the GameMode. Will be latency amount of out sync with the Server.
     UFUNCTION(Client, Reliable, WithValidation)
     void SetRespawnCountdown(float RespawnTimeRemaining);
@@ -141,7 +147,8 @@ protected:
 
     /** user configurable desired prediction ping
      * (will be negotiated with server. */
-    UPROPERTY(BlueprintReadOnly, GlobalConfig, Category=Network)
+    //UPROPERTY(BlueprintReadOnly, GlobalConfig, Category=Network)
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, GlobalConfig, Category=Network)
     float DesiredPredictionPing;
 
     UPROPERTY(GlobalConfig, EditAnywhere, Category = Debug)
@@ -174,8 +181,9 @@ protected:
     // Update projected pawn aim control
     virtual void UpdatePawnControlProjection(float DeltaTime);
 
-
 	/** Propose a desired ping to server */
 	UFUNCTION(reliable, server, WithValidation)
 	virtual void ServerNegotiatePredictionPing(float NewPredictionPing);
+
+    //void OnWindowFocusChanged(bool bIsFocused);
 };

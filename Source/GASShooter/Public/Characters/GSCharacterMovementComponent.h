@@ -37,6 +37,9 @@ class GASSHOOTER_API UGSCharacterMovementComponent : public UCharacterMovementCo
 		///@brief Sets variables on character movement component before making a predictive correction.
 		virtual void PrepMoveFor(class ACharacter* Character) override;
 
+		// Walk
+		uint8 SavedRequestToStartWalking : 1;
+
 		// Sprint
 		uint8 SavedRequestToStartSprinting : 1;
 
@@ -67,6 +70,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Speed")
 	float KnockedDownSpeedMultiplier;
 
+	uint8 RequestToStartWalking : 1;
 	uint8 RequestToStartSprinting : 1;
 	uint8 RequestToStartADS : 1;
 
@@ -99,6 +103,12 @@ public:
 	virtual float GetMaxBrakingDeceleration() const override;
 	virtual void UpdateFromCompressedFlags(uint8 Flags) override;
 	virtual class FNetworkPredictionData_Client* GetPredictionData_Client() const override;
+
+	// Walk
+	UFUNCTION(BlueprintCallable, Category = "Walk")
+	void StartWalking();
+	UFUNCTION(BlueprintCallable, Category = "Walk")
+	void StopWalking();
 
 	// Sprint
 	UFUNCTION(BlueprintCallable, Category = "Sprint")

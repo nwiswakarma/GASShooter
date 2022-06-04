@@ -12,6 +12,7 @@ void UGSCharacterMovementComponent::FGSSavedMove::Clear()
 {
     Super::Clear();
 
+    SavedRequestToStartWalking = false;
     SavedRequestToStartSprinting = false;
     SavedRequestToStartADS = false;
 }
@@ -20,14 +21,19 @@ uint8 UGSCharacterMovementComponent::FGSSavedMove::GetCompressedFlags() const
 {
     uint8 Result = Super::GetCompressedFlags();
 
-    if (SavedRequestToStartSprinting)
+    if (SavedRequestToStartWalking)
     {
         Result |= FLAG_Custom_0;
     }
 
-    if (SavedRequestToStartADS)
+    if (SavedRequestToStartSprinting)
     {
         Result |= FLAG_Custom_1;
+    }
+
+    if (SavedRequestToStartADS)
+    {
+        Result |= FLAG_Custom_2;
     }
 
     return Result;
@@ -37,6 +43,12 @@ bool UGSCharacterMovementComponent::FGSSavedMove::CanCombineWith(const FSavedMov
 {
     // Set which moves can be combined together.
     // This will depend on the bit flags that are used.
+
+    if (SavedRequestToStartWalking != ((FGSSavedMove*)NewMove.Get())->SavedRequestToStartWalking)
+    {
+        return false;
+    }
+
     if (SavedRequestToStartSprinting != ((FGSSavedMove*)NewMove.Get())->SavedRequestToStartSprinting)
     {
         return false;
@@ -57,6 +69,7 @@ void UGSCharacterMovementComponent::FGSSavedMove::SetMoveFor(ACharacter* Charact
     UGSCharacterMovementComponent* CharacterMovement = Cast<UGSCharacterMovementComponent>(Character->GetCharacterMovement());
     if (CharacterMovement)
     {
+        SavedRequestToStartWalking = CharacterMovement->RequestToStartWalking;
         SavedRequestToStartSprinting = CharacterMovement->RequestToStartSprinting;
         SavedRequestToStartADS = CharacterMovement->RequestToStartADS;
     }
@@ -124,6 +137,11 @@ float UGSCharacterMovementComponent::GetMaxSpeed() const
         return Owner->GetMoveSpeed() * KnockedDownSpeedMultiplier;
     }
 
+    if (RequestToStartWalking)
+    {
+        return CurrentMovementSettings.GetSpeedForGait(EALSGait::Walking);
+    }
+
     if (RequestToStartSprinting)
     {
         //return Owner->GetMoveSpeed() * SprintSpeedMultiplier;
@@ -174,9 +192,11 @@ void UGSCharacterMovementComponent::UpdateFromCompressedFlags(uint8 Flags)
     // It basically just resets the movement component to the state
     // when the move was made so it can simulate from there.
 
-    RequestToStartSprinting = (Flags & FSavedMove_Character::FLAG_Custom_0) != 0;
+    RequestToStartWalking = (Flags & FSavedMove_Character::FLAG_Custom_0) != 0;
 
-    RequestToStartADS = (Flags & FSavedMove_Character::FLAG_Custom_1) != 0;
+    RequestToStartSprinting = (Flags & FSavedMove_Character::FLAG_Custom_1) != 0;
+
+    RequestToStartADS = (Flags & FSavedMove_Character::FLAG_Custom_2) != 0;
 }
 
 FNetworkPredictionData_Client* UGSCharacterMovementComponent::GetPredictionData_Client() const
@@ -193,6 +213,16 @@ FNetworkPredictionData_Client* UGSCharacterMovementComponent::GetPredictionData_
     }
 
     return ClientPredictionData;
+}
+
+void UGSCharacterMovementComponent::StartWalking()
+{
+    RequestToStartWalking = true;
+}
+
+void UGSCharacterMovementComponent::StopWalking()
+{
+    RequestToStartWalking = false;
 }
 
 void UGSCharacterMovementComponent::StartSprinting()

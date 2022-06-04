@@ -241,10 +241,6 @@ class GASSHOOTER_API AGSUTProjectile : public AActor//, public IUTResetInterface
     UPROPERTY()
     bool bFakeClientProjectile;
 
-    /** Fake projectile on this client providing visuals for me */
-    UPROPERTY()
-    AGSUTProjectile* MyFakeProjectile;
-
     /** If true (usually), move fake to server replicated position. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = Projectile)
     bool bMoveFakeToReplicatedPos;
@@ -252,6 +248,10 @@ class GASSHOOTER_API AGSUTProjectile : public AActor//, public IUTResetInterface
     /** If true, explode instead of bouncing off damageable geometry. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = Projectile)
     bool bDamageOnBounce;
+
+    /** Fake projectile on this client providing visuals for me */
+    UPROPERTY()
+    AGSUTProjectile* MyFakeProjectile;
 
     /** Real projectile for which this projectile is providing visuals */
     UPROPERTY()

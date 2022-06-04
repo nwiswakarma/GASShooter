@@ -49,6 +49,12 @@ public:
 	bool bUseAimingSpreadMod;
 
 	UPROPERTY(BlueprintReadWrite, Category = "Accuracy")
+	bool bProjectAim;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Accuracy")
+	FVector ProjectionNormal;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Accuracy")
 	FGameplayTag AimingTag;
 
 	UPROPERTY(BlueprintReadWrite, Category = "Accuracy")

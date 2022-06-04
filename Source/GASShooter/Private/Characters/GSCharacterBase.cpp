@@ -20,6 +20,7 @@ AGSCharacterBase::AGSCharacterBase(const class FObjectInitializer& ObjectInitial
 
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Visibility, ECollisionResponse::ECR_Overlap);
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
+	GetCapsuleComponent()->SetCollisionResponseToChannel(COLLISION_TRACE_PAWN, ECollisionResponse::ECR_Block);
 
 	bAlwaysRelevant = true;
 

@@ -283,6 +283,9 @@ protected:
     UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "GASShooter|GSWeapon")
     float FiringNoiseMaxRange;
 
+    UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "GASShooter|GSWeapon")
+    float FireRate;
+
     UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "GASShooter|UI")
     TSubclassOf<class UGSHUDReticle> PrimaryHUDReticleClass;
 

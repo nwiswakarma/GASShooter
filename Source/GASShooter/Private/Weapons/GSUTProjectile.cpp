@@ -20,6 +20,8 @@
 //#include "UTDemoNetDriver.h"
 //#include "UTDemoRecSpectator.h"
 
+#include "Kismet/KismetSystemLibrary.h"
+
 //DEFINE_LOG_CATEGORY_STATIC(LogUTProjectile, Log, All);
 
 AGSUTProjectile::AGSUTProjectile(const class FObjectInitializer& ObjectInitializer) 
@@ -243,6 +245,7 @@ void AGSUTProjectile::BeginPlay()
 
     bHasSpawnedFully = true;
 
+    // AUTH
     if (GetLocalRole() == ROLE_Authority)
     {
         ProjectileMovement->Velocity.Z += TossZ;
@@ -280,6 +283,7 @@ void AGSUTProjectile::BeginPlay()
         //    }
         //}
     }
+    // CLIENT
     else
     {
         AGSPlayerController* MyPlayer = Cast<AGSPlayerController>(InstigatorController ? InstigatorController : GEngine->GetFirstLocalPlayerController(GetWorld()));
@@ -302,8 +306,49 @@ void AGSUTProjectile::BeginPlay()
             for (int32 i = 0; i < MyPlayer->GetFakeProjectiles().Num(); i++)
             {
                 AGSUTProjectile* Fake = MyPlayer->GetFakeProjectiles()[i];
-                if (!Fake || Fake->IsPendingKillPending())
+                //if (!Fake || Fake->IsPendingKillPending())
+                if (!Fake)
                 {
+                    //UKismetSystemLibrary::PrintString(this, FString::Printf(TEXT("FAKE PROJECTILE IS NULL")));
+
+                    //if (Fake)
+                    //{
+                    //    AGSUTProjectile* best = nullptr;
+                    //    float closest = 0.f;
+
+                    //    for (int32 j=0; j<MyPlayer->GetFakeProjectiles().Num(); ++j)
+                    //    {
+                    //        AGSUTProjectile* f = MyPlayer->GetFakeProjectiles()[j];
+
+                    //        if (! f)
+                    //        {
+                    //            continue;
+                    //        }
+
+                    //        if (CanMatchFake(f, VelDir))
+                    //        {
+                    //            if (best)
+                    //            {
+                    //                // see if new one is better
+                    //                float NewDist = (f->GetActorLocation() - GetActorLocation()).SizeSquared();
+                    //                if (BestDist > NewDist)
+                    //                {
+                    //                    best = f;
+                    //                    closest = NewDist;
+                    //                }
+                    //            }
+                    //            else
+                    //            {
+                    //                best = f;
+                    //                closest = (best->GetActorLocation() - GetActorLocation()).SizeSquared();
+                    //            }
+                    //        }
+                    //    }
+
+                    //    UE_LOG(LogTemp,Warning, TEXT("FAKE PROJECTILE IS BEST MATCH: %d"), Fake == best);
+                    //}
+
+                    // Removes invalid projectiles
                     MyPlayer->GetFakeProjectiles().RemoveAt(i, 1);
                     i--;
                 }
@@ -335,13 +380,23 @@ void AGSUTProjectile::BeginPlay()
             }
             if (BestMatch)
             {
-                MyPlayer->GetFakeProjectiles().RemoveAt(BestMatchIndex, 1);
-                BeginFakeProjectileSynch(BestMatch);
+                if (! BestMatch->IsPendingKillPending())
+                {
+                    MyPlayer->GetFakeProjectiles().RemoveAt(BestMatchIndex, 1);
+                    BeginFakeProjectileSynch(BestMatch);
+                }
+                else
+                if (MyPlayer->IsDebuggingProjectiles())
+                {
+                    //UKismetSystemLibrary::PrintString(this, FString::Printf(TEXT("%s fake projectile is pending kill"), *GetName()));
+                    UE_LOG(LogTemp, Warning, TEXT("%s fake projectile is pending kill"), *GetName());
+                }
             }
             else
             if (MyPlayer != NULL && MyPlayer->IsDebuggingProjectiles() && MyPlayer->GetPredictionTime() > 0.0f)
             {
                 // debug logging of failed match
+                UKismetSystemLibrary::PrintString(this, FString::Printf(TEXT("%s FAILED to find fake projectile match with velocity %f %f %f"), *GetName(), GetVelocity().X, GetVelocity().Y, GetVelocity().Z));
                 UE_LOG(LogTemp, Warning, TEXT("%s FAILED to find fake projectile match with velocity %f %f %f"), *GetName(), GetVelocity().X, GetVelocity().Y, GetVelocity().Z);
                 for (int32 i = 0; i < MyPlayer->GetFakeProjectiles().Num(); i++)
                 {
@@ -415,6 +470,8 @@ void AGSUTProjectile::BeginFakeProjectileSynch(AGSUTProjectile* InFakeProjectile
         RepMove.Rotation = MyFakeProjectile->GetActorRotation();
         PostNetReceiveLocationAndRotation();
     }
+
+    // @TODO Lifespan desync on client with high ping
     AGSPlayerController* MyPlayer = Cast<AGSPlayerController>(InstigatorController ? InstigatorController : GEngine->GetFirstLocalPlayerController(GetWorld()));
     if (MyPlayer && (GetLifeSpan() != 0.f))
     {
@@ -423,6 +480,7 @@ void AGSUTProjectile::BeginFakeProjectileSynch(AGSUTProjectile* InFakeProjectile
         SetLifeSpan(FMath::Max(0.001f, GetLifeSpan() - CatchupTickDelta));
     }
     MyFakeProjectile->SetLifeSpan(GetLifeSpan());
+
     if (bNetTemporary)
     {
         // @TODO FIXMESTEVE - will have issues if there are replicated properties that haven't been received yet

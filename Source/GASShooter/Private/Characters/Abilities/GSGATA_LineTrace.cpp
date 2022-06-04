@@ -24,6 +24,8 @@ void AGSGATA_LineTrace::Configure(
 	bool bInTraceAffectsAimPitch,
 	bool bInTraceFromPlayerViewPoint,
 	bool bInUseAimingSpreadMod,
+	bool bInProjectAim,
+	FVector InProjectNormal,
 	float InMaxRange,
 	float InBaseSpread,
 	float InAimingSpreadMod,
@@ -46,6 +48,8 @@ void AGSGATA_LineTrace::Configure(
 	bTraceAffectsAimPitch = bInTraceAffectsAimPitch;
 	bTraceFromPlayerViewPoint = bInTraceFromPlayerViewPoint;
 	bUseAimingSpreadMod = bInUseAimingSpreadMod;
+	bProjectAim = bInProjectAim;
+	ProjectionNormal = InProjectNormal;
 	MaxRange = InMaxRange;
 	BaseSpread = InBaseSpread;
 	AimingSpreadMod = InAimingSpreadMod;

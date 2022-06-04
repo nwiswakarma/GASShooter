@@ -13,6 +13,7 @@
 #define COLLISION_PICKUP						ECollisionChannel::ECC_GameTraceChannel6
 #define COLLISION_INTERACTABLE					ECollisionChannel::ECC_GameTraceChannel7
 #define COLLISION_TRACE_WEAPON                  ECollisionChannel::ECC_GameTraceChannel8
+#define COLLISION_TRACE_PAWN                    ECollisionChannel::ECC_GameTraceChannel9
 
 UENUM(BlueprintType)
 enum class EGSAbilityInputID : uint8
@@ -23,22 +24,24 @@ enum class EGSAbilityInputID : uint8
 	Confirm				UMETA(DisplayName = "Confirm"),
 	// 2 Cancel
 	Cancel				UMETA(DisplayName = "Cancel"),
-	// 3 Sprint
+	// 3 Walk
+	Walk			    UMETA(DisplayName = "Walk"),
+	// 4 Sprint
 	Sprint				UMETA(DisplayName = "Sprint"),
-	// 4 Jump
+	// 5 Jump
 	Jump				UMETA(DisplayName = "Jump"),
-	// 5 PrimaryFire
+	// 6 PrimaryFire
 	PrimaryFire			UMETA(DisplayName = "Primary Fire"),
-	// 6 SecondaryFire
+	// 7 SecondaryFire
 	SecondaryFire		UMETA(DisplayName = "Secondary Fire"),
-	// 7 Alternate Fire
+	// 8 Alternate Fire
 	AlternateFire		UMETA(DisplayName = "Alternate Fire"),
-	// 8 Reload
+	// 9 Reload
 	Reload				UMETA(DisplayName = "Reload"),
-	// 9 NextWeapon
+	// 10 NextWeapon
 	NextWeapon			UMETA(DisplayName = "Next Weapon"), 
-	// 10 PrevWeapon
+	// 11 PrevWeapon
 	PrevWeapon			UMETA(DisplayName = "Previous Weapon"),
-	// 11 Interact
+	// 12 Interact
 	Interact			UMETA(DisplayName = "Interact")
 };

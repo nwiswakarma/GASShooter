@@ -48,7 +48,6 @@ void UGSUTProjectileMovementComponent::SetUpdatedComponent(USceneComponent* NewU
     }
 }
 
-
 bool UGSUTProjectileMovementComponent::MoveUpdatedComponentImpl(const FVector& Delta, const FQuat& NewRotation, bool bSweep, FHitResult* OutHit, ETeleportType Teleport)
 {
     // if we have no extra components or we don't need to sweep, use the default behavior
@@ -206,6 +205,7 @@ bool UGSUTProjectileMovementComponent::MoveUpdatedComponentImpl(const FVector& D
         }
     }
 }
+
 void UGSUTProjectileMovementComponent::HandleImpact(const FHitResult& Hit, float TimeSlice, const FVector& MoveDelta)
 {
     if (!bShouldBounce && Hit.Normal.Z < HitZStopSimulatingThreshold && UpdatedComponent != NULL && UpdatedComponent->GetOwner() != NULL && TimeSlice > 0.0f)

@@ -16,6 +16,8 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "PaperSprite.h"
 
+#include "Framework/Application/SlateApplication.h"
+
 AGSPlayerController::AGSPlayerController(const class FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {
 	PredictionFudgeFactor = 20.f;
@@ -39,8 +41,35 @@ void AGSPlayerController::BeginPlay()
 	if (GetLocalRole() < ROLE_Authority)
 	{
 		ServerNegotiatePredictionPing(DesiredPredictionPing);
+
+        //FSlateApplication::Get().OnApplicationActivationStateChanged()
+        //    .AddUObject(this, &AGSPlayerController::OnWindowFocusChanged);
 	}
 }
+
+//void AGSPlayerController::OnWindowFocusChanged(bool bIsFocused)
+//{
+//    if (bIsFocused)
+//    {
+//        // Unlimit game FPS
+//        //GEngine->SetMaxFPS( 0 );
+//    
+//        // Unpause the game
+//        // MyHUD->SetPause( false );
+//    
+//        UE_LOG(LogTemp, Warning, TEXT("FOCUS IN"));
+//    }
+//    else
+//    {
+//        // Reduce FPS to max 10 while in the background
+//        //GEngine->SetMaxFPS( 10.0f );
+//    
+//        // Pause the game, using your "show pause menu" function
+//        // MyHUD->SetPause( true );
+//    
+//        UE_LOG(LogTemp, Warning, TEXT("FOCUS OUT"));
+//    }
+//}
 
 void AGSPlayerController::Tick(float DeltaTime)
 {
@@ -80,6 +109,9 @@ void AGSPlayerController::UpdatePawnControlProjection(float DeltaTime)
 
     check(IsValid(Camera));
 
+    // World to screen projection flag
+    bool bProjectionSuccess = false;
+
     const FVector ProjectionOffset = HeroCharacter->GetProjectionAnchorOffset();
     const FVector ProjectionNormal = HeroCharacter->GetActorUpVector();
     const FVector ProjectionAnchor = HeroCharacter->GetActorLocation() + ProjectionOffset*ProjectionNormal;
@@ -94,7 +126,22 @@ void AGSPlayerController::UpdatePawnControlProjection(float DeltaTime)
 
     // Anchor screen position (no DPI scale)
     FVector2D ViewportAnchor;
-    ProjectWorldLocationToScreen(ProjectionAnchor, ViewportAnchor);
+    bProjectionSuccess = UGameplayStatics::ProjectWorldToScreen(
+        this,
+        ProjectionAnchor,
+        ViewportAnchor,
+        true
+        );
+
+    // Projection failed, possibly due to target world location
+    // is out of camera (commonly during client initial possession).
+    //
+    // Reset camera location and abort.
+    if (! bProjectionSuccess)
+    {
+        Camera->SetRelativeLocation(FVector::ZeroVector);
+        return;
+    }
 
     // Mouse position (no DPI scale) on viewport
     FVector2D MouseViewportPos(UWidgetLayoutLibrary::GetMousePositionOnViewport(World));
@@ -165,8 +212,19 @@ void AGSPlayerController::UpdatePawnControlProjection(float DeltaTime)
         UGameplayStatics::ProjectWorldToScreen(
             this,
             WeaponAnchorWorld,
-            WeaponAnchorScreen
+            WeaponAnchorScreen,
+            true
             );
+
+        // Projection failed, possibly due to target world location
+        // is out of camera (commonly during client initial possession).
+        //
+        // Reset camera location and abort.
+        if (! bProjectionSuccess)
+        {
+            Camera->SetRelativeLocation(FVector::ZeroVector);
+            return;
+        }
 
         // Calculate screen location closest to the mouse cursor
         // and weapon aim screen projected line
@@ -192,50 +250,48 @@ void AGSPlayerController::UpdatePawnControlProjection(float DeltaTime)
 
     {
         // Viewport extents
-        FVector2D Exts = (ViewportSize*.5f)-ViewportSpanSize;
+        FVector2D VSExts = (ViewportSize*.5f);
 
-        // Viewport anchor to mouse delta, divided by two.
+        // Viewport target position
         //
-        // View target is half the distance between
-        // viewport anchor to mouse position to make sure
-        // camera is not going to chase mouse cursor indefinitely.
-        FVector2D ViewTarget = ViewportAnchorToMouse*.5f;
+        // View target position is half the distance between viewport anchor to mouse position.
+        // The distance is relative to the size of viewport with span.
 
-        // Bound to max camera distance
+        FVector2D ViewportSizeWithSpan = (ViewportSize+ViewportSpanSize);
+        FVector2D VSWithSpanRatio = ViewportSize/ViewportSizeWithSpan;
+
+        FVector2D PosRatio = ViewportAnchorToMouse/ViewportSizeWithSpan;
+        PosRatio.X = FMath::Clamp(PosRatio.X, -VSWithSpanRatio.X, VSWithSpanRatio.X);
+        PosRatio.Y = FMath::Clamp(PosRatio.Y, -VSWithSpanRatio.Y, VSWithSpanRatio.Y);
+
+        FVector2D ViewTargetPos = PosRatio*VSExts;
+
+        // Clamp view target to viewport extents for safety
+
+        if (FMath::Abs(ViewTargetPos.X) > VSExts.X)
         {
-            const float MaxSize = MaxCameraDistance;
-            const float SquaredSize = ViewTarget.SizeSquared();
-
-            if (SquaredSize > FMath::Square(MaxSize))
-            {
-                const float Scale = MaxSize * FMath::InvSqrt(SquaredSize);
-                ViewTarget.X *= Scale;
-                ViewTarget.Y *= Scale;
-            }
+            ViewTargetPos.X = ViewTargetPos.X > 0.f
+                ? VSExts.X
+                : -VSExts.X;
         }
 
-        if (FMath::Abs(ViewTarget.X) > Exts.X)
+        if (FMath::Abs(ViewTargetPos.Y) > VSExts.Y)
         {
-            ViewTarget.X = ViewTarget.X > 0.f
-                ? Exts.X
-                : -Exts.X;
+            ViewTargetPos.Y = ViewTargetPos.Y > 0.f
+                ? VSExts.Y
+                : -VSExts.Y;
         }
 
-        if (FMath::Abs(ViewTarget.Y) > Exts.Y)
-        {
-            ViewTarget.Y = ViewTarget.Y > 0.f
-                ? Exts.Y
-                : -Exts.Y;
-        }
+        // Deproject view target position
 
-        FVector2D ViewTargetPos = ViewportAnchor+ViewTarget;
+        FVector2D ViewTargetOnAnchorPos = ViewportAnchor+ViewTargetPos;
 
         FVector ViewTargetWorldPos;
         FVector ViewTargetWorldDir;
 
         UGameplayStatics::DeprojectScreenToWorld(
             this,
-            ViewTargetPos,
+            ViewTargetOnAnchorPos,
             ViewTargetWorldPos,
             ViewTargetWorldDir
             );
@@ -247,12 +303,14 @@ void AGSPlayerController::UpdatePawnControlProjection(float DeltaTime)
             );
     }
 
+    // Interpolate destination view position
     FVector ViewInterpPos(
         FMath::FInterpTo(ViewSrc.X, ViewDst.X, DeltaTime, CameraInterpSpeed),
         FMath::FInterpTo(ViewSrc.Y, ViewDst.Y, DeltaTime, CameraInterpSpeed),
         FMath::FInterpTo(ViewSrc.Z, ViewDst.Z, DeltaTime, CameraInterpSpeed)
         );
 
+    // Move camera
     Camera->SetWorldLocation(CameraWorldPos+(ViewInterpPos-CameraProjected));
 }
 
@@ -515,6 +573,30 @@ FVector2D AGSPlayerController::GetProjectedAimScreenLocation()
     return ProjectedAimScreenLocation;
 }
 
+int32 AGSPlayerController::GetPing() const
+{
+    if (PlayerState && (GetNetMode() != NM_Standalone))
+    {
+        return PlayerState->GetPing();
+    }
+    else
+    {
+        return -1;
+    }
+}
+
+int32 AGSPlayerController::GetExactPing() const
+{
+    if (PlayerState && (GetNetMode() != NM_Standalone))
+    {
+        return PlayerState->ExactPing;
+    }
+    else
+    {
+        return -1;
+    }
+}
+
 float AGSPlayerController::GetPredictionTime()
 {
     // exact ping is in msec, divide by 1000 to get time in seconds
@@ -532,7 +614,8 @@ float AGSPlayerController::GetProjectileSleepTime()
 void AGSPlayerController::ServerNegotiatePredictionPing_Implementation(float NewPredictionPing)
 {
 	//MaxPredictionPing = FMath::Clamp(NewPredictionPing, 0.f, UUTGameEngine::StaticClass()->GetDefaultObject<UUTGameEngine>()->ServerMaxPredictionPing);
-	MaxPredictionPing = FMath::Clamp(NewPredictionPing, 0.f, 120.f);
+	//MaxPredictionPing = FMath::Clamp(NewPredictionPing, 0.f, 120.f);
+	MaxPredictionPing = FMath::Clamp(NewPredictionPing, 0.f, 999.f);
 }
 
 bool AGSPlayerController::ServerNegotiatePredictionPing_Validate(float NewPredictionPing)

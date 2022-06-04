@@ -76,6 +76,8 @@ public:
 		UPARAM(DisplayName = "Trace Affects Aim Pitch") bool bInTraceAffectsAimPitch = true,
 		UPARAM(DisplayName = "Trace From Player ViewPoint") bool bInTraceFromPlayerViewPoint = false,
 		UPARAM(DisplayName = "Use Aiming Spread Mod") bool bInUseAimingSpreadMod = false,
+		UPARAM(DisplayName = "Project Aim To Normal") bool bInProjectAim = false,
+		UPARAM(DisplayName = "Aim Projection Normal") FVector InProjectNormal = FVector::UpVector,
 		UPARAM(DisplayName = "Max Range") float InMaxRange = 999999.0f,
 		UPARAM(DisplayName = "Base Targeting Spread") float InBaseSpread = 0.0f,
 		UPARAM(DisplayName = "Aiming Spread Mod") float InAimingSpreadMod = 0.0f,

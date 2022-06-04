@@ -270,6 +270,16 @@ void AGSHeroCharacter::FinishDying()
     Super::FinishDying();
 }
 
+void AGSHeroCharacter::StartWalking()
+{
+	SetDesiredGait(EALSGait::Walking);
+}
+
+void AGSHeroCharacter::StopWalking()
+{
+	SetDesiredGait(EALSGait::Running);
+}
+
 void AGSHeroCharacter::StartSprinting()
 {
 	SetDesiredGait(EALSGait::Sprinting);
@@ -662,7 +672,7 @@ void AGSHeroCharacter::BeginPlay()
     bEnableNetworkOptimizations = !IsNetMode(NM_Standalone);
 
     // Make sure the mesh and animbp update after the CharacterBP to ensure it gets the most recent values.
-    GetMesh()->AddTickPrerequisiteActor(this);
+    GetMainMesh()->AddTickPrerequisiteActor(this);
 
     // Set the Movement Model
     SetMovementModel();
@@ -736,7 +746,7 @@ void AGSHeroCharacter::PreInitializeComponents()
 {
     Super::PreInitializeComponents();
 
-    MainAnimInstance = Cast<UALSCharacterAnimInstance>(GetMesh()->GetAnimInstance());
+    MainAnimInstance = Cast<UALSCharacterAnimInstance>(GetMainMesh()->GetAnimInstance());
 
     if (! MainAnimInstance)
     {
@@ -753,8 +763,6 @@ void AGSHeroCharacter::PostInitializeComponents()
     Super::PostInitializeComponents();
 
     GSMovementComponent = Cast<UGSCharacterMovementComponent>(GetMovementComponent());
-
-    StartingThirdPersonMeshLocation = GetMainMesh()->GetRelativeLocation();
 
     AimingRotation = GetActorRotation();
     ProjectedCameraViewLocation = GetActorLocation();
@@ -1067,10 +1075,6 @@ void AGSHeroCharacter::SetupStartupPerspective()
         GetCamera()->Activate();
         PC->SetViewTarget(this);
     }
-
-    // Reset the main mesh
-    GetMainMesh()->SetVisibility(true, true);
-    GetMainMesh()->SetRelativeLocation(StartingThirdPersonMeshLocation);
 }
 
 bool AGSHeroCharacter::DoesWeaponExistInInventory(AGSWeapon* InWeapon)
@@ -1871,11 +1875,16 @@ void AGSHeroCharacter::UpdateCharacterMovement()
     // Update the movement state based on current gait
     switch (AllowedGait)
     {
+        case EALSGait::Walking:
+            GSMovementComponent->StartWalking();
+            break;
+
         case EALSGait::Sprinting:
             GSMovementComponent->StartSprinting();
             break;
 
         default:
+            GSMovementComponent->StopWalking();
             GSMovementComponent->StopSprinting();
             break;
     }
@@ -1918,7 +1927,8 @@ void AGSHeroCharacter::UpdateGroundedRotation(float DeltaTime)
                 }
                 SmoothCharacterRotation({0.0f, YawValue, 0.0f}, 500.0f, GroundedRotationRate, DeltaTime);
             }
-            else if (RotationMode == EALSRotationMode::Aiming)
+            else
+            if (RotationMode == EALSRotationMode::Aiming)
             {
                 const float ControlYaw = AimingRotation.Yaw;
                 SmoothCharacterRotation({0.0f, ControlYaw, 0.0f}, 1000.0f, 20.0f, DeltaTime);

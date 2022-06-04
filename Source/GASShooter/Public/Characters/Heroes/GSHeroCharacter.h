@@ -84,6 +84,14 @@ public:
 
     virtual void FinishDying() override;
 
+	// Walk
+
+	UFUNCTION(BlueprintCallable, Category = "Walk")
+	void StartWalking();
+
+	UFUNCTION(BlueprintCallable, Category = "Walk")
+	void StopWalking();
+
 	// Sprint
 
 	UFUNCTION(BlueprintCallable, Category = "Sprint")
@@ -224,9 +232,6 @@ public:
     FSimpleMulticastDelegate* GetTargetCancelInteractionDelegate(UPrimitiveComponent* InteractionComponent) override;
 
 protected:
-    UPROPERTY(BlueprintReadOnly, Category = "GASShooter|GSHeroCharacter")
-    FVector StartingThirdPersonMeshLocation;
-
     UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category = "GASShooter|Abilities")
     float ReviveDuration;
 

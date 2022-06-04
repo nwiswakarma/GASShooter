@@ -14,6 +14,7 @@
 
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "Net/UnrealNetwork.h"
 #include "PaperSprite.h"
 
@@ -37,6 +38,8 @@ AGSWeapon::AGSWeapon()
 
     FiringNoiseLoudness = 1.f;
     FiringNoiseMaxRange = 2000.f;
+
+    FireRate = 0.1f;
 
     CollisionComp = CreateDefaultSubobject<UCapsuleComponent>(FName("CollisionComponent"));
     CollisionComp->InitCapsuleSize(40.0f, 50.0f);
@@ -173,7 +176,6 @@ void AGSWeapon::Equip()
     {
         WeaponMesh3P->AttachToComponent(OwningCharacter->GetMainMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, AttachPoint);
         WeaponMesh3P->SetRelativeLocation(WeaponMesh3PEquippedRelativeLocation);
-        //WeaponMesh3P->SetRelativeRotation(FRotator(0, 0, -90.0f));
         WeaponMesh3P->CastShadow = true;
         WeaponMesh3P->bCastHiddenShadow = true;
 
@@ -471,6 +473,8 @@ FGSProjectileSpawnInfo AGSWeapon::SpawnNetPredictedProjectile(
 {
     //DrawDebugSphere(GetWorld(), SpawnLocation, 10, 10, FColor::Green, true);
 
+    const bool bHasAuthority = GetLocalRole() == ROLE_Authority;
+
     AGSPlayerController* OwningPlayer = OwningCharacter
         ? Cast<AGSPlayerController>(OwningCharacter->GetController())
         : NULL;
@@ -493,14 +497,23 @@ FGSProjectileSpawnInfo AGSWeapon::SpawnNetPredictedProjectile(
     //    }
     //}
 
-    if ((CatchupTickDelta > 0.f) && (GetLocalRole() != ROLE_Authority))
+    //if (!bHasAuthority)
+    //    UE_LOG(LogTemp, Warning, TEXT("AUTH: %d, CatchupTick: %f, Ping: %f, ExactPing: %f, MaxPredictionPing: %f"),
+    //        bHasAuthority,
+    //        CatchupTickDelta*1000.f,
+    //        OwningPlayer?(OwningPlayer->PlayerState?OwningPlayer->PlayerState->GetPing():-1.f):-1.f,
+    //        OwningPlayer?(OwningPlayer->PlayerState?OwningPlayer->PlayerState->ExactPing:-1.f):-1.f,
+    //        OwningPlayer?OwningPlayer->GetMaxPredictionPing():-1.f
+    //        );
+
+    if ((CatchupTickDelta > 0.f) && !bHasAuthority)
     {
         float SleepTime = OwningPlayer->GetProjectileSleepTime();
 
         if (SleepTime > 0.f)
         {
             // lag is so high need to delay spawn
-            if (!GetWorldTimerManager().IsTimerActive(SpawnDelayedFakeProjHandle))
+            if (! GetWorldTimerManager().IsTimerActive(SpawnDelayedFakeProjHandle))
             {
                 DelayedProjectile.ProjectileClass = ProjectileClass;
                 DelayedProjectile.SpawnLocation = SpawnLocation;
@@ -514,7 +527,11 @@ FGSProjectileSpawnInfo AGSWeapon::SpawnNetPredictedProjectile(
                     );
             }
 
-            return {};
+            return FGSProjectileSpawnInfo(
+                nullptr,
+                0.f,
+                false
+                );
         }
     }
 
@@ -523,7 +540,7 @@ FGSProjectileSpawnInfo AGSWeapon::SpawnNetPredictedProjectile(
     SpawnParams.Owner = OwningCharacter;
     SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-    AGSUTProjectile* NewProjectile = ((GetLocalRole() == ROLE_Authority) || (CatchupTickDelta > 0.f))
+    AGSUTProjectile* NewProjectile = (bHasAuthority || (CatchupTickDelta > 0.f))
         ? GetWorld()->SpawnActor<AGSUTProjectile>(
             ProjectileClass,
             SpawnLocation,
@@ -558,7 +575,7 @@ FGSProjectileSpawnInfo AGSWeapon::SpawnNetPredictedProjectile(
             NewProjectile->ShooterRotation = OwningCharacter->GetActorRotation();
         }
 
-        if (GetLocalRole() == ROLE_Authority)
+        if (bHasAuthority)
         {
             //NewProjectile->HitsStatsName = HitsStatsName;
 
@@ -570,14 +587,22 @@ FGSProjectileSpawnInfo AGSWeapon::SpawnNetPredictedProjectile(
         else
         {
             NewProjectile->InitFakeProjectile(OwningPlayer);
-            NewProjectile->SetLifeSpan(FMath::Min(NewProjectile->GetLifeSpan(), 2.f * FMath::Max(0.f, CatchupTickDelta)));
+            //NewProjectile->SetLifeSpan(FMath::Min(NewProjectile->GetLifeSpan(), 2.f * FMath::Max(0.f, CatchupTickDelta)));
+            //NewProjectile->SetLifeSpan(FMath::Min(NewProjectile->GetLifeSpan(), (2.f * FMath::Max(0.f, CatchupTickDelta)) + .1f));
+            NewProjectile->SetLifeSpan(FMath::Min(NewProjectile->GetLifeSpan(), 4.f * FMath::Max(0.f, CatchupTickDelta)));
+            //NewProjectile->SetLifeSpan(FMath::Min(NewProjectile->GetLifeSpan(), 1.f));
+
+            //if (!bHasAuthority)
+            //{
+            //    UE_LOG(LogTemp,Warning, TEXT("Lifespan %f"), NewProjectile->GetLifeSpan());
+            //}
         }
     }
 
     return FGSProjectileSpawnInfo(
         NewProjectile,
         CatchupTickDelta,
-        GetLocalRole() != ROLE_Authority
+        !bHasAuthority
         );
 }
 
@@ -587,50 +612,52 @@ void AGSWeapon::SpawnDelayedFakeProjectile()
         ? Cast<AGSPlayerController>(OwningCharacter->GetController())
         : NULL;
 
-    if (OwningPlayer)
+    if (! OwningPlayer)
     {
-        FActorSpawnParameters SpawnParams;
-        SpawnParams.Instigator = OwningCharacter;
-        SpawnParams.Owner = OwningCharacter;
-        SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+        return;
+    }
 
-        AGSUTProjectile* NewProjectile = GetWorld()->SpawnActor<AGSUTProjectile>(
-            DelayedProjectile.ProjectileClass,
-            DelayedProjectile.SpawnLocation,
-            DelayedProjectile.SpawnRotation,
-            SpawnParams
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.Instigator = OwningCharacter;
+    SpawnParams.Owner = OwningCharacter;
+    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+    AGSUTProjectile* NewProjectile = GetWorld()->SpawnActor<AGSUTProjectile>(
+        DelayedProjectile.ProjectileClass,
+        DelayedProjectile.SpawnLocation,
+        DelayedProjectile.SpawnRotation,
+        SpawnParams
+        );
+
+    if (NewProjectile)
+    {
+        float MaxPredictionPing = OwningPlayer->GetMaxPredictionPing();
+        float PredictionFudgeFactor = OwningPlayer->GetPredictionFudgeFactor();
+
+        NewProjectile->InitFakeProjectile(OwningPlayer);
+        NewProjectile->SetLifeSpan(
+            FMath::Min(
+                NewProjectile->GetLifeSpan(),
+                0.002f * FMath::Max(0.f, MaxPredictionPing+PredictionFudgeFactor)
+                )
             );
 
-        if (NewProjectile)
-        {
-            float MaxPredictionPing = OwningPlayer->GetMaxPredictionPing();
-            float PredictionFudgeFactor = OwningPlayer->GetPredictionFudgeFactor();
-
-            NewProjectile->InitFakeProjectile(OwningPlayer);
-            NewProjectile->SetLifeSpan(
-                FMath::Min(
-                    NewProjectile->GetLifeSpan(),
-                    0.002f * FMath::Max(0.f, MaxPredictionPing+PredictionFudgeFactor)
-                    )
-                );
-
-            //if (NewProjectile->OffsetVisualComponent)
-            //{
-            //    switch (GetWeaponHand())
-            //    {
-            //    case EWeaponHand::HAND_Center:
-            //        NewProjectile->InitialVisualOffset = NewProjectile->InitialVisualOffset + LowMeshOffset;
-            //        NewProjectile->OffsetVisualComponent->RelativeLocation = NewProjectile->InitialVisualOffset;
-            //        break;
-            //    case EWeaponHand::HAND_Hidden:
-            //    {
-            //        NewProjectile->InitialVisualOffset = NewProjectile->InitialVisualOffset + VeryLowMeshOffset;
-            //        NewProjectile->OffsetVisualComponent->RelativeLocation = NewProjectile->InitialVisualOffset;
-            //        break;
-            //    }
-            //    }
-            //}
-        }
+        //if (NewProjectile->OffsetVisualComponent)
+        //{
+        //    switch (GetWeaponHand())
+        //    {
+        //    case EWeaponHand::HAND_Center:
+        //        NewProjectile->InitialVisualOffset = NewProjectile->InitialVisualOffset + LowMeshOffset;
+        //        NewProjectile->OffsetVisualComponent->RelativeLocation = NewProjectile->InitialVisualOffset;
+        //        break;
+        //    case EWeaponHand::HAND_Hidden:
+        //    {
+        //        NewProjectile->InitialVisualOffset = NewProjectile->InitialVisualOffset + VeryLowMeshOffset;
+        //        NewProjectile->OffsetVisualComponent->RelativeLocation = NewProjectile->InitialVisualOffset;
+        //        break;
+        //    }
+        //    }
+        //}
     }
 }
 

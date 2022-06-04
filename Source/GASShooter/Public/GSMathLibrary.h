@@ -47,4 +47,59 @@ public:
         float DrawTime = 5.0f
         );
 
+	UFUNCTION(BlueprintCallable)
+    static void EvaluateBezier(
+        const FVector& ControlPoint0,
+        const FVector& ControlPoint1,
+        const FVector& ControlPoint2,
+        const FVector& ControlPoint3,
+        int32 NumPoints,
+        TArray<FVector>& OutPoints
+        );
+
+	UFUNCTION(BlueprintCallable)
+    static void EvaluateBezier3(
+        const FVector& ControlPointA,
+        const FVector& ControlPointB,
+        const FVector& ControlPointC,
+        float BiasAToB,
+        float BiasBToC,
+        int32 NumPoints,
+        TArray<FVector>& OutPoints
+        );
+
+	UFUNCTION(BlueprintCallable)
+    static void ClosestPointsBetweenSegments(
+        const FVector& SegmentAStart,
+        const FVector& SegmentAEnd,
+        const FVector& SegmentBStart,
+        const FVector& SegmentBEnd,
+        FVector& OutPointA,
+        FVector& OutPointB
+        );
+
+	UFUNCTION(BlueprintCallable)
+    static bool CapsuleAndSweepSphereIntersection(
+        const FVector& CapsuleLocation,
+        float CapsuleRadius,
+        float CapsuleHalfHeight,
+        const FVector& SphereStart,
+        const FVector& SphereEnd,
+        float SphereRadius,
+        FVector& OutPointA,
+        FVector& OutPointB
+        );
+
+	UFUNCTION(BlueprintCallable)
+    static bool SweepCapsuleAndSphereIntersection(
+        const FVector& CapsuleStart,
+        const FVector& CapsuleEnd,
+        float CapsuleRadius,
+        float CapsuleHalfHeight,
+        const FVector& SphereStart,
+        const FVector& SphereEnd,
+        float SphereRadius,
+        FVector& OutPointA,
+        FVector& OutPointB
+        );
 };

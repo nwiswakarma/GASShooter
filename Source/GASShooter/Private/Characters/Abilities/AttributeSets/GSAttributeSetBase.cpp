@@ -5,6 +5,7 @@
 #include "Characters/GSCharacterBase.h"
 #include "GameplayEffect.h"
 #include "GameplayEffectExtension.h"
+#include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "Player/GSPlayerController.h"
 
@@ -139,7 +140,10 @@ void UGSAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCall
 				// Show damage number for the Source player unless it was self damage
 				if (SourceActor != TargetActor)
 				{
-					AGSPlayerController* PC = Cast<AGSPlayerController>(SourceController);
+					//AGSPlayerController* PC = Cast<AGSPlayerController>(SourceController);
+
+                    AGSPlayerController* PC = Cast<AGSPlayerController>(UGameplayStatics::GetPlayerController(GetWorld(), 0));
+
 					if (PC)
 					{
 						FGameplayTagContainer DamageNumberTags;

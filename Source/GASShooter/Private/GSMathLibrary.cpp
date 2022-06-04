@@ -155,3 +155,123 @@ bool UGSMathLibrary::LineTraceSweepTowardsObservedObjectVelocity_HeadingOnly(
 
     return false;
 }
+
+void UGSMathLibrary::EvaluateBezier(
+    const FVector& ControlPoint0,
+    const FVector& ControlPoint1,
+    const FVector& ControlPoint2,
+    const FVector& ControlPoint3,
+    int32 NumPoints,
+    TArray<FVector>& OutPoints
+    )
+{
+    if (NumPoints >= 2)
+    {
+        FVector ControlPoints[4] = {
+            ControlPoint0,
+            ControlPoint1,
+            ControlPoint2,
+            ControlPoint3
+            };
+        FVector::EvaluateBezier(ControlPoints, NumPoints, OutPoints);
+    }
+}
+
+void UGSMathLibrary::EvaluateBezier3(
+    const FVector& ControlPointA,
+    const FVector& ControlPointB,
+    const FVector& ControlPointC,
+    float BiasAToB,
+    float BiasBToC,
+    int32 NumPoints,
+    TArray<FVector>& OutPoints
+    )
+{
+    if (NumPoints >= 2)
+    {
+        float ClampedBiasAB = FMath::Clamp(BiasAToB, 0.f, 1.f);
+        float ClampedBiasBC = FMath::Clamp(BiasBToC, 0.f, 1.f);
+        FVector ControlPoints[4] = {
+            ControlPointA,
+            ControlPointA+(ControlPointB-ControlPointA)*ClampedBiasAB,
+            ControlPointB+(ControlPointC-ControlPointB)*ClampedBiasBC,
+            ControlPointC
+            };
+        FVector::EvaluateBezier(ControlPoints, NumPoints, OutPoints);
+    }
+}
+
+void UGSMathLibrary::ClosestPointsBetweenSegments(
+    const FVector& SegmentAStart,
+    const FVector& SegmentAEnd,
+    const FVector& SegmentBStart,
+    const FVector& SegmentBEnd,
+    FVector& OutPointA,
+    FVector& OutPointB
+    )
+{
+    FMath::SegmentDistToSegmentSafe(
+        SegmentAStart,
+        SegmentBStart,
+        SegmentAEnd,
+        SegmentBEnd,
+        OutPointA,
+        OutPointB
+        );
+}
+
+bool UGSMathLibrary::CapsuleAndSweepSphereIntersection(
+    const FVector& CapsuleLocation,
+    float CapsuleRadius,
+    float CapsuleHalfHeight,
+    const FVector& SphereStart,
+    const FVector& SphereEnd,
+    float SphereRadius,
+    FVector& OutPointA,
+    FVector& OutPointB
+    )
+{
+    FVector CapsuleSegment0 = CapsuleLocation + FVector(0,0,-CapsuleHalfHeight);
+    FVector CapsuleSegment1 = CapsuleLocation + FVector(0,0, CapsuleHalfHeight);
+
+    FMath::SegmentDistToSegmentSafe(
+        CapsuleSegment0,
+        SphereStart,
+        CapsuleSegment1,
+        SphereEnd,
+        OutPointA,
+        OutPointB
+        );
+
+    float PointsDistSq = (OutPointB-OutPointA).SizeSquared();
+
+    return PointsDistSq < FMath::Square(CapsuleRadius+SphereRadius);
+}
+
+bool UGSMathLibrary::SweepCapsuleAndSphereIntersection(
+    const FVector& CapsuleStart,
+    const FVector& CapsuleEnd,
+    float CapsuleRadius,
+    float CapsuleHalfHeight,
+    const FVector& SphereStart,
+    const FVector& SphereEnd,
+    float SphereRadius,
+    FVector& OutPointA,
+    FVector& OutPointB
+    )
+{
+    FMath::SegmentDistToSegmentSafe(
+        CapsuleStart,
+        SphereStart,
+        CapsuleEnd,
+        SphereEnd,
+        OutPointA,
+        OutPointB
+        );
+
+    FVector PointDelta = OutPointB-OutPointA;
+    float RadiusSq = FMath::Square(CapsuleRadius+SphereRadius);
+    float Height = CapsuleHalfHeight+CapsuleRadius+SphereRadius;
+
+    return PointDelta.SizeSquared2D() <= RadiusSq && PointDelta.Z <= Height;
+}

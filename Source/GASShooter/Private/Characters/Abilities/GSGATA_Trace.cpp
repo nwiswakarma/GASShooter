@@ -19,6 +19,8 @@ AGSGATA_Trace::AGSGATA_Trace()
 	bTraceFromPlayerViewPoint = false;
 	MaxRange = 999999.0f;
 	bUseAimingSpreadMod = false;
+	bProjectAim = false;
+	ProjectionNormal = FVector::UpVector;
 	BaseSpread = 0.0f;
 	AimingSpreadMod = 0.0f;
 	TargetingSpreadIncrement = 0.0f;
@@ -30,6 +32,8 @@ AGSGATA_Trace::AGSGATA_Trace()
 void AGSGATA_Trace::ResetSpread()
 {
 	bUseAimingSpreadMod = false;
+	bProjectAim = false;
+	ProjectionNormal = FVector::UpVector;
 	BaseSpread = 0.0f;
 	AimingSpreadMod = 0.0f;
 	TargetingSpreadIncrement = 0.0f;
@@ -270,7 +274,15 @@ void AGSGATA_Trace::AimWithPlayerController(const AActor* InSourceActor, FCollis
 	const float ConeHalfAngle = FMath::DegreesToRadians(CurrentSpread * 0.5f);
 	const int32 RandomSeed = FMath::Rand();
 	FRandomStream WeaponRandomStream(RandomSeed);
-	const FVector ShootDir = WeaponRandomStream.VRandCone(AdjustedAimDir, ConeHalfAngle, ConeHalfAngle);
+
+    // Apply aim spread
+	FVector ShootDir = WeaponRandomStream.VRandCone(AdjustedAimDir, ConeHalfAngle, ConeHalfAngle);
+
+    // Flatten Z direction, if specified
+    if (bProjectAim)
+    {
+        ShootDir = FVector::PointPlaneProject(ShootDir, FVector::ZeroVector, ProjectionNormal).GetSafeNormal();
+    }
 
 	OutTraceEnd = TraceStart + (ShootDir * MaxRange);
 }
