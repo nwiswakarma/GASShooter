@@ -591,11 +591,6 @@ FGSProjectileSpawnInfo AGSWeapon::SpawnNetPredictedProjectile(
             //NewProjectile->SetLifeSpan(FMath::Min(NewProjectile->GetLifeSpan(), (2.f * FMath::Max(0.f, CatchupTickDelta)) + .1f));
             NewProjectile->SetLifeSpan(FMath::Min(NewProjectile->GetLifeSpan(), 4.f * FMath::Max(0.f, CatchupTickDelta)));
             //NewProjectile->SetLifeSpan(FMath::Min(NewProjectile->GetLifeSpan(), 1.f));
-
-            //if (!bHasAuthority)
-            //{
-            //    UE_LOG(LogTemp,Warning, TEXT("Lifespan %f"), NewProjectile->GetLifeSpan());
-            //}
         }
     }
 
